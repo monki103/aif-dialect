@@ -1,0 +1,15 @@
+# VIOLATION: ATTACH:REF without CONTENT_REF
+# Expected: rejected — CONTENT_REF is required when ATTACH:REF
+
+@AIF/2.0
+FROM: agent_rd
+TO: agent_reviewer
+TYPE: REVIEW_REQ
+ID: R001
+REF: T001
+REPORT_TO: agent_rd
+---
+ARTIFACTS: [auth.py]
+ATTACH: REF
+ACCEPT:
+  - A01: "Tests pass"

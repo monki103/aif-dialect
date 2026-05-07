@@ -1,0 +1,20 @@
+@AIF/2.0
+FROM: agent_rd
+TO: agent_reviewer
+TYPE: REVIEW_REQ
+ID: R001
+REF: T001
+REPORT_TO: agent_rd
+---
+ARTIFACTS: [server.py]
+ATTACH: INLINE
+ACCEPT:
+  - A01: "Returns 200 OK on GET /"
+RESULT:
+  server.py: |
+    from flask import Flask
+    app = Flask(__name__)
+
+    @app.route("/")
+    def index():
+        return "OK", 200

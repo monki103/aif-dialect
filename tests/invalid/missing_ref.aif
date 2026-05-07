@@ -1,0 +1,12 @@
+# VIOLATION: REF field is absent
+# Expected: rejected — REF is required (use - if no reference)
+
+@AIF/2.0
+FROM: agent_pm
+TO: agent_rd
+TYPE: TASK
+ID: T001
+REPORT_TO: agent_pm
+---
+GOAL: "Do something"
+PRIORITY: MED

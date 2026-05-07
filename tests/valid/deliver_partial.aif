@@ -1,0 +1,12 @@
+@AIF/2.0
+FROM: agent_rd
+TO: agent_pm
+TYPE: DELIVER
+ID: D002
+REF: T002
+REPORT_TO: agent_pm
+---
+STATUS: PARTIAL
+SUMMARY: "bcrypt hashing done; rate limiting not implemented — blocked on missing Redis dependency"
+ARTIFACTS: [auth.py]
+NOTE: "Rate limiting requires Redis. Confirm infra availability before proceeding."

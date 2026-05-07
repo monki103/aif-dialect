@@ -1,0 +1,12 @@
+@AIF/2.0
+FROM: agent_rd
+TO: agent_pm
+TYPE: QUERY
+ID: Q001
+REF: T002
+REPORT_TO: agent_rd
+---
+QUESTIONS:
+  - Q01: "Is Redis available in the production environment?"
+  - Q02: "Should rate limiting apply to API key auth as well, or only password login?"
+CONTEXT: "Rate limiting implementation blocked pending infra confirmation"

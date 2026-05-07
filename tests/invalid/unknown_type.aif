@@ -1,0 +1,13 @@
+# VIOLATION: TYPE value not in the allowed set
+# Expected: rejected — TYPE must be one of TASK|DELIVER|REVIEW_REQ|FEEDBACK|REVISE|QUERY|CLARIFY|ACK|CANCEL
+
+@AIF/2.0
+FROM: agent_pm
+TO: agent_rd
+TYPE: REQUEST
+ID: T001
+REF: -
+REPORT_TO: agent_pm
+---
+GOAL: "Do something"
+PRIORITY: MED

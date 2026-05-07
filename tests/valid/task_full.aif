@@ -1,0 +1,25 @@
+@AIF/2.0
+FROM: agent_pm
+TO: agent_rd
+TYPE: TASK
+ID: T002
+REF: T001
+REPORT_TO: agent_pm
+MODEL: pro
+SKILLS: [aif-dialect, universal-agent]
+---
+GOAL: "Refactor auth module for security compliance"
+SPEC:
+  FEATURES:
+    - F01: "Replace MD5 password hashing with bcrypt"
+    - F02: "Add rate limiting: max 5 failed logins per 15 min"
+  CONSTRAINTS:
+    - C01: "Must not break existing session tokens"
+    - C02: "No secrets in logs"
+ACCEPT:
+  - A01: "All existing tests pass"
+  - A02: "New bcrypt hashing verified by unit test"
+PRIORITY: HIGH
+PARALLEL_TASKS: [T003]
+CONTEXT_REF: T001
+SUGGESTED_ROUTE: T0

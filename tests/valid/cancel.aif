@@ -1,0 +1,9 @@
+@AIF/2.0
+FROM: agent_pm
+TO: agent_rd
+TYPE: CANCEL
+ID: X001
+REF: T002
+REPORT_TO: agent_pm
+---
+REASON: "Project deprioritized — auth refactor postponed to next sprint"

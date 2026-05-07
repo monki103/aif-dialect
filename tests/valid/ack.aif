@@ -1,0 +1,9 @@
+@AIF/2.0
+FROM: agent_rd
+TO: agent_pm
+TYPE: ACK
+ID: A001
+REF: T001
+REPORT_TO: agent_pm
+---
+STATUS: RECEIVED

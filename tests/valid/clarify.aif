@@ -1,0 +1,11 @@
+@AIF/2.0
+FROM: agent_pm
+TO: agent_rd
+TYPE: CLARIFY
+ID: C001
+REF: Q001
+REPORT_TO: agent_pm
+---
+ANSWERS:
+  - Q01: "Yes, Redis 7.x is available in prod. Use REDIS_URL env var."
+  - Q02: "Password login only. API key auth is exempt from rate limiting."

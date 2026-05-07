@@ -1,0 +1,12 @@
+# VIOLATION: FROM field is absent
+# Expected: rejected — FROM is required
+
+@AIF/2.0
+TO: agent_rd
+TYPE: TASK
+ID: T001
+REF: -
+REPORT_TO: agent_pm
+---
+GOAL: "Do something"
+PRIORITY: MED

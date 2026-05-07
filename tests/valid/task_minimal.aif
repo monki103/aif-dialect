@@ -1,0 +1,12 @@
+@AIF/2.0
+FROM: agent_pm
+TO: agent_rd
+TYPE: TASK
+ID: T001
+REF: -
+REPORT_TO: agent_pm
+---
+GOAL: "Write a hello-world HTTP server in Python"
+ACCEPT:
+  - A01: "Returns 200 OK on GET /"
+PRIORITY: MED

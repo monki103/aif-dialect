@@ -1,0 +1,12 @@
+# VIOLATION: No --- separator between header and body
+# Expected: rejected — header/body boundary is required
+
+@AIF/2.0
+FROM: agent_pm
+TO: agent_rd
+TYPE: TASK
+ID: T001
+REF: -
+REPORT_TO: agent_pm
+GOAL: "Do something"
+PRIORITY: MED

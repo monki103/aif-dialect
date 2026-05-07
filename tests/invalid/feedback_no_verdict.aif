@@ -1,0 +1,16 @@
+# VIOLATION: FEEDBACK missing required VERDICT field
+# Expected: rejected — VERDICT is required in FEEDBACK
+
+@AIF/2.0
+FROM: agent_reviewer
+TO: agent_rd
+TYPE: FEEDBACK
+ID: F001
+REF: R001
+REPORT_TO: agent_reviewer
+---
+SCORE: 70/100
+ISSUES:
+  - ID:I01  SEVERITY:HIGH
+    DESC: "Missing input validation"
+    FIX: "Add type checks before processing"

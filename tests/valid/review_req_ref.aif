@@ -1,0 +1,16 @@
+@AIF/2.0
+FROM: agent_rd
+TO: agent_reviewer
+TYPE: REVIEW_REQ
+ID: R002
+REF: T002
+REPORT_TO: agent_rd
+TRUNCATE: true
+---
+ARTIFACTS: [auth.py]
+ATTACH: REF
+CONTENT_REF: D002
+ACCEPT:
+  - A01: "All existing tests pass"
+  - A02: "New bcrypt hashing verified by unit test"
+NOTE: "Focus on security correctness"
