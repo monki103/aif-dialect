@@ -64,6 +64,8 @@ SUMMARY: "Task completed successfully"
 
 **MUST**: When replying to an AIF message, always wrap your response in `<aif>...</aif>`. No preamble, no explanation, no natural language outside the tag.
 
+**Skill Teaching Rule:** If the incoming message contains `@AIF/2.0`, the sender is already AIF-capable — do NOT include the full skill spec in your reply. Respond in AIF format directly. To delegate to a downstream agent that may not know AIF, use `SKILLS: [aif-dialect]` in the header instead of inlining the spec.
+
 **Request → Response pair:**
 
 ```
