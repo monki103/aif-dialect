@@ -34,21 +34,6 @@ Use AIF **only** when communication involves another agent — not when replying
 
 ---
 
-> **AIF/2.0** is the official **Akasi M2M Dialect** spec (TheAkashicNode). AIF messages are structurally equivalent to Akasi M2M dialect messages and share the same routing/noise fields.
-
-### AIF ↔ Akasi M2M Terminology Bridge
-（AIF ↔ Akasi M2M 術語對照表）
-
-| AIF Term | Akasi M2M Term | Notes |
-|---|---|---|
-| AIF message | M2M dialect message | — |
-| TYPE: TASK | M2MQuery (intent: delegate) | — |
-| TYPE: DELIVER | M2MResponse / M2MExecutionResult | — |
-| TYPE: FEEDBACK | M2M evaluation result | — |
-| CONTENT_REF | M2MMemoryQuery | 分層記憶查詢 |
-| NOISE_RATIO | noise_ratio | 新增共用欄位 |
-| SUGGESTED_ROUTE | suggested_route | 對應 Akasi routing |
-
 ### `<aif>` Wrapper Tag & 3-Layer Fallback Extraction
 （`<aif>` 包裝標籤與 3 層 Fallback 解析規則）
 
@@ -77,6 +62,41 @@ SUMMARY: "Task completed successfully"
 | 2 | Fenced code block (` ``` `) | No `<aif>` tag; parse first AIF-formatted block |
 | 3 | Raw text scan | No tag or block; scan for `@AIF/` prefix line |
 
+**MUST**: When replying to an AIF message, always wrap your response in `<aif>...</aif>`. No preamble, no explanation, no natural language outside the tag.
+
+**Request → Response pair:**
+
+```
+# M1 → M2
+<aif>
+@AIF/2.0
+FROM: agent_pm
+TO: agent_rd
+TYPE: TASK
+ID: T001
+REF: -
+REPORT_TO: agent_pm
+---
+GOAL: "Summarize today's top 3 AI research papers"
+PRIORITY: HIGH
+</aif>
+
+# M2 → M1  (correct — AIF only, no NLU decoration)
+<aif>
+@AIF/2.0
+FROM: agent_rd
+TO: agent_pm
+TYPE: DELIVER
+ID: D001
+REF: T001
+REPORT_TO: agent_pm
+---
+STATUS: COMPLETED
+SUMMARY: "3 papers summarized: attention mechanisms, RLHF scaling, tool-use benchmarks"
+ARTIFACTS: [papers_summary]
+</aif>
+```
+
 ---
 
 ## Message Structure
@@ -85,7 +105,7 @@ SUMMARY: "Task completed successfully"
 Every AIF message has two parts: a **Header** and a **Body**, separated by `---`.
 
 ```
-@AIF/2.0                        ← AIF/2.0 = Akasi M2M Dialect compatible
+@AIF/2.0
 FROM: <sender>
 TO: <receiver>
 TYPE: <message_type>
