@@ -8,6 +8,22 @@ AIF is domain-agnostic: it applies to any multi-agent task (research, writing, d
 
 ---
 
+## Auto-Activation
+（自動觸發）
+
+This skill is **self-activating** — its presence in the loaded skill set is the signal that AIF should be used; the rules below decide *when within a session* each message uses AIF vs NLU.
+
+**Architectural rule (for upstream components):**
+
+- Slash commands, role definitions, and orchestrators **MUST NOT** hardcode `Load: aif-dialect` into sub-agent prompts, and **MUST NOT** prescribe AIF or NLU in their workflow descriptions.
+- They should describe workflows protocol-agnostically (e.g., "send a TASK", "return a DELIVER") — `TASK` / `DELIVER` / `REVIEW_REQ` / `FEEDBACK` / `REVISE` / `QUERY` / `CLARIFY` / `ACK` / `CANCEL` are generic multi-agent message-type names, not AIF-specific.
+- Whether those messages are serialized as AIF or NLU is decided here, by this skill, based on the runtime triggers below.
+- If this skill is not loaded in the receiver's context, the sender MUST fall back to natural language. Do not assume availability.
+
+This separation keeps `aif-dialect` opt-in and lets PM/orchestrator roles stay clean.
+
+---
+
 ## When to Use AIF
 （使用時機）
 
