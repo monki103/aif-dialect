@@ -1,19 +1,19 @@
-# AIF Dialect — Agent Interchange Format 2.0
+# AIF Dialect — Agent Interchange Format 2.1
 
-A structured message format for agent-to-agent (M2M) communication. Model-agnostic.
+A structured message format for **machine-to-machine (M2M)** communication between LLM-based agents. Model-agnostic, role-agnostic, single-file installable.
 
 ## What is AIF?
 
 AIF replaces natural language in multi-agent pipelines with compact, structured key-value messages. It eliminates the "telephone game" problem — where information degrades as it passes through multiple agents — by making every field explicit and unambiguous.
 
 ```
-@AIF/2.0
-FROM: agent_pm
-TO: agent_rd
+@AIF/2.1
+FROM: agent_a
+TO: agent_b
 TYPE: TASK
 ID: T001
 REF: -
-REPORT_TO: agent_pm
+REPORT_TO: agent_a
 ---
 GOAL: "Implement user authentication module"
 ACCEPT:
@@ -22,13 +22,22 @@ ACCEPT:
 PRIORITY: HIGH
 ```
 
-## When to Use AIF
+## What's new in v2.1
 
-**Use AIF** when communicating between agents (multi-step pipelines, review loops, delegation).
+- **Layered architecture** — AIF Core is pure M2M; transport implementations live in `profiles/`; user-facing translation is application's job (see [`DESIGN.md`](DESIGN.md)).
+- **Transport abstraction** — first-class message IDs + a `RESOLVE(id)` contract. Concrete transports (e.g., append-only file log) are pluggable.
+- **Context handoff policies** — for single-shot sub-agents that lack prior context, dispatchers can hand off by reference (`CONTEXT_REF` + `READ_MODE`) or by summary (`CONTEXT_SUMMARY` + `CONTEXT_SOURCE`), or both.
+- **Default working language (I8)** — M2M traffic defaults to English. Switching to the user's locale happens at the application's language-gateway boundary, not inside AIF.
+- v2.0 messages remain valid (additive change).
 
-**Use natural language** when the receiver is a human user. Never send raw AIF to a user.
+See [`DESIGN.md`](DESIGN.md) for design rationale and the eight invariants (I1–I8).
 
-See [SKILL.md](SKILL.md) for full trigger conditions and format rules.
+## Recommended usage
+
+- **Use AIF** when communicating between agents (multi-step pipelines, review loops, delegation).
+- **Use natural language** when the receiver is a human user. The application's gateway translates the final hand-off; AIF is never shown raw to users.
+
+This is application-layer guidance, not a normative rule of the spec — see [SKILL.md](SKILL.md) and [DESIGN.md](DESIGN.md) §2.
 
 ## Install (Claude Code)
 
@@ -37,6 +46,8 @@ cp SKILL.md ~/.claude/commands/aif-dialect.md
 ```
 
 Then use `/aif-dialect` in any Claude Code session to load the spec.
+
+For deployments that want persistent message addressability (across single-shot sub-agent boundaries), additionally read a transport profile such as [`profiles/file-backed-transport.md`](profiles/file-backed-transport.md).
 
 ## Message Types
 
@@ -57,6 +68,8 @@ Then use `/aif-dialect` in any Claude Code session to load the spec.
 ```
 aif-dialect/
 ├── SKILL.md          ← Full spec + Claude Code skill loader
+├── DESIGN.md         ← Design invariants, layered architecture rationale
+├── profiles/         ← Transport implementations (file-backed-transport.md, …)
 ├── examples/         ← Annotated examples per message type
 └── tests/
     ├── valid/        ← Conformance: messages that MUST parse correctly
@@ -115,22 +128,22 @@ Input token difference is negligible (~5–11 tokens) because the system prompt 
 
 ---
 
-# AIF Dialect — Agent Interchange Format 2.0（繁體中文）
+# AIF Dialect — Agent Interchange Format 2.1（繁體中文）
 
-一種用於 Agent 之間（M2M）溝通的結構化訊息格式。與模型無關。
+一種用於 **Machine-to-Machine (M2M)** Agent 之間通訊的結構化訊息格式。與模型無關、與 role 無關、單檔可安裝。
 
 ## 什麼是 AIF？
 
 AIF 在多 Agent pipeline 中以緊湊的結構化 key-value 訊息取代自然語言，消除「傳話遊戲」問題——資訊在多個 Agent 之間傳遞時逐漸失真——透過讓每個欄位都明確且無歧義來解決這個問題。
 
 ```
-@AIF/2.0
-FROM: agent_pm
-TO: agent_rd
+@AIF/2.1
+FROM: agent_a
+TO: agent_b
 TYPE: TASK
 ID: T001
 REF: -
-REPORT_TO: agent_pm
+REPORT_TO: agent_a
 ---
 GOAL: "Implement user authentication module"
 ACCEPT:
@@ -139,13 +152,22 @@ ACCEPT:
 PRIORITY: HIGH
 ```
 
-## 何時使用 AIF？
+## v2.1 新增內容
 
-**使用 AIF**：當通訊對象是另一個 Agent 時（多步驟 pipeline、review loop、任務委派）。
+- **分層架構** — AIF Core 是純 M2M 規格；傳輸實作放在 `profiles/`；user-facing 翻譯是應用層的事（詳見 [`DESIGN.md`](DESIGN.md)）。
+- **Transport 抽象** — 第一級的 message ID + `RESOLVE(id)` 合約。具體傳輸實作（如 append-only 檔案 log）可替換。
+- **Context handoff 政策** — 為了讓 single-shot sub-agent 取得上游脈絡，dispatcher 可以選擇 by-reference（`CONTEXT_REF` + `READ_MODE`）或 by-summary（`CONTEXT_SUMMARY` + `CONTEXT_SOURCE`），或兩者合用。
+- **預設工作語言（I8）** — M2M 流量預設用英文。切換到使用者 locale 是應用層的 language gateway 邊界，不在 AIF 規範內。
+- v2.0 訊息在 v2.1 下仍然有效（additive 變更）。
 
-**使用自然語言**：當接收方是人類使用者時。永遠不要直接把 AIF 訊息送給使用者。
+設計理由與 8 條 invariants（I1–I8）詳見 [`DESIGN.md`](DESIGN.md)。
 
-完整觸發條件與格式規則請見 [SKILL.md](SKILL.md)。
+## 建議使用情境
+
+- **使用 AIF**：通訊對象是另一個 Agent 時（多步驟 pipeline、review loop、任務委派）。
+- **使用自然語言**：接收方是人類使用者時。最後一手由應用層的 language gateway 翻譯出去；AIF 永遠不直接呈現給使用者。
+
+這是應用層的使用建議，不是規格本身的規範規則——詳見 [SKILL.md](SKILL.md) 與 [DESIGN.md](DESIGN.md) §2。
 
 ## 安裝（Claude Code）
 
@@ -154,6 +176,8 @@ cp SKILL.md ~/.claude/commands/aif-dialect.md
 ```
 
 在任何 Claude Code session 中執行 `/aif-dialect` 即可載入本規格。
+
+若部署需要跨 single-shot sub-agent 邊界的訊息持久化定址，請額外讀取一份 transport profile，例如 [`profiles/file-backed-transport.md`](profiles/file-backed-transport.md)。
 
 ## 訊息類型
 
@@ -174,6 +198,8 @@ cp SKILL.md ~/.claude/commands/aif-dialect.md
 ```
 aif-dialect/
 ├── SKILL.md          ← 完整規格 + Claude Code skill 載入檔
+├── DESIGN.md         ← 設計不變式、分層架構理由
+├── profiles/         ← Transport 實作（file-backed-transport.md, …）
 ├── examples/         ← 各訊息類型的標註範例
 └── tests/
     ├── valid/        ← 合規測試：必須能正確解析的訊息
