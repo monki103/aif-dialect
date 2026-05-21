@@ -156,6 +156,18 @@ DELIVER 都能用 `IN-REPLY-TO` 對齊到唯一的 spawn 訊息。
 - 這條規則是 main 的 hard invariant：「有 AIF message 必有 handoff_book
   entry」。違反會破壞 self-recovery 與 audit chain。
 
+### Message terminator
+
+每則 AIF 訊息以 `===END_OF_MESSAGE===` 單獨一行收尾。
+
+- 該標記必須獨占一行，前後不得有 inline 內容
+- 在 `handoff_book.md` 中，每則訊息嚴格遵守
+  `header → body → 終止符 → 空行 → 下一則` 的順序
+- 選擇此標記而非空行 / `---` / implicit boundary 的理由：
+  - 顯式邊界對 model fallback 抽取最穩
+  - 與 v2.1 / `handoff_book_spec.md` 維持連續
+  - `---` 與 Markdown 表格 / horizontal rule / YAML front-matter 衝突
+
 ## 4. Example
 
 ```
@@ -209,25 +221,19 @@ Reply 範例（sub-agent → main，含上下文引用）：
    - SUMMARY body 必含 `SOURCE_IDS:` 與摘要內容
    - DELIVER / QUERY body schema 待定
    - 走訪過的初版形狀見 `examples/v3-walkthrough/`，尚未 normative
-2. **Message terminator** — handoff_book.md 是多訊息串接的單一檔，需
-   要明確 message 邊界。Walkthrough 目前沿用 v2.1 的 `===END_OF_MESSAGE===`
-   分隔符，但 v3 spec 還沒明文。候選：
-   - 沿用 `===END_OF_MESSAGE===`（顯式，最穩）
-   - 改用 `---` 或空行（簡潔但較依賴 parser 健壯度）
-   - 不要分隔符，靠下一則 `# Title:` 作為 implicit boundary
-3. **QUERY body schema 細節** — header 已支援 `*IN-REPLY-TO:*` 與
+2. **QUERY body schema 細節** — header 已支援 `*IN-REPLY-TO:*` 與
    `*TYPE: QUERY*`。Body 如何表達「我問的是什麼」（指定欄位 / 引用片段 /
    自由提問）尚未定。
-4. **I3「single-file installable」重新界定** — v2.1 的 I3 假設 spec
+3. **I3「single-file installable」重新界定** — v2.1 的 I3 假設 spec
    要能 self-contained 載入；hub-spoke 模型下 main 載入完整 Hub Spec、
    sub 只看 inline stub，I3 需降格為「Hub Spec 本身是 single-file」，
    不再是全域 invariant。
-5. **Format-agnostic core** — 「連 JSON 都沒關係」是強原則還是
+4. **Format-agnostic core** — 「連 JSON 都沒關係」是強原則還是
    aspirational？若強制，v3 Core 必須只定義語意，syntax 可替換
    （Markdown / JSON / YAML / KV 皆合法的同構表示）。
-6. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
+5. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
    （aif-dialect 本身只是 spec repo，不適合做 runtime 量測）。
-7. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
+6. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
    都符合 hub-spoke 的工具不對稱前提？若否，v3 是否需要 fallback 模式？
 
 ### 已決議（不再 pending）
@@ -238,6 +244,7 @@ Reply 範例（sub-agent → main，含上下文引用）：
 - 多收件人 spawn 必拆成多則 TASK（單值 `TO`）
 - 所有 AIF 訊息必入 handoff_book（無例外，含純 forward）
 - main 視兩層遺忘（軟性 / 硬性）為 routine 機制，非 emergency
+- Message terminator = `===END_OF_MESSAGE===`（單獨一行；前後留空行）
 
 ---
 
@@ -250,3 +257,5 @@ Reply 範例（sub-agent → main，含上下文引用）：
 - 2026-05-21: 加入端到端 walkthrough（`examples/v3-walkthrough/`）。
   Pending 新增「message terminator」項目（walkthrough 沿用
   `===END_OF_MESSAGE===` 待 spec 拍板）。
+- 2026-05-21: 鎖定 message terminator = `===END_OF_MESSAGE===`（單獨一行）。
+  §3 補上 "Message terminator" 小節；§6 移除該 pending 項並列入已決議。
