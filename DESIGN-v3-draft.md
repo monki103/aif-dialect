@@ -1,9 +1,9 @@
 ### Status
 
-DRAFT — proposal only, not yet ratified.
-Body schema, transport profile, and SKILL.md changes are NOT part of this
-document. v2.1 spec under `SKILL.md` remains the active normative reference
-until v3 is ratified.
+Design rationale for AIF v3, ratified into `SKILL.md` (v3.0).
+This document captures the design discussion and decision history; the
+normative spec is `SKILL.md`. If `SKILL.md` and this document disagree,
+`SKILL.md` wins.
 
 Date: 2026-05-21
 Branch: `claude/aif-v3-hub-spoke-design-VRDSK`
