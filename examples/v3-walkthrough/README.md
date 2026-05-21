@@ -42,7 +42,7 @@ rules it expands to **14**:
 ## Things to notice while reading `handoff_book.md`
 
 1. **All messages use the v3 header schema** (§3 of `DESIGN-v3-draft.md`):
-   `# Title; ## Description; *TO:*; *FROM:*; *TYPE:*; *DATE:*; *ID:*;
+   `# Title; ## Description; *TO:*; *FROM:*; *TYPE:*; *ID:*;
    *IN-REPLY-TO:*; *MESSAGE:*`.
 2. **`IN-REPLY-TO:` rule applied**:
    - Present for: every DELIVER, fixer TASK (msg 10 replies to review), final
@@ -62,9 +62,11 @@ rules it expands to **14**:
 
 ## Body schemas
 
-TASK / DELIVER / SUMMARY body shapes are now **normative**, defined in
-`DESIGN-v3-draft.md §4`. The walkthrough's bodies conform to those
-schemas. QUERY / CLARIFY bodies are still pending (see `§7 item 1`).
+All message bodies are **fenced JSON blocks** (`\`\`\`json ... \`\`\``) with
+snake_case keys, immediately following `*MESSAGE:*`. Body shapes per TYPE are
+**normative**, defined in `DESIGN-v3-draft.md §4`. The walkthrough's bodies
+conform to those schemas. QUERY / CLARIFY schemas are also normative
+(§4.4 / §4.5).
 
 ### Message terminator
 
