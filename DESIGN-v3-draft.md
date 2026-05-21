@@ -37,10 +37,24 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
   - spawn / orchestrate sub-agents
   - 唯一對 `handoff_book.md` 有讀寫權的角色
   - 為每則訊息生成 `ID`
+  - **每次 sub-agent spawn 必產生一則 TASK 訊息進 handoff_book**
+    （即使是純 forward，body 也以 `INPUTS:` 列出引用的 ID，確保
+    `IN-REPLY-TO` 鏈不斷）
   - 把既有 message 從 handoff_book 抽出，inline 注入到新 sub-agent
     的 launch prompt 中（context assignment）
-  - 必要時可摘要 handoff_book 後清空自身 context，再從摘要重新賦予
-    自己 context（self-recovery）
+  - **兩層 context 管理**（v3 視為 routine，非 emergency）：
+    - 軟性遺忘：每輪 sub 對話結束後，main 不再把 verbatim msg 重新
+      塞進 prompt，改以 ID + working state 摘要引用
+    - 硬性遺忘：在自然 checkpoint（cycle 結束 / token 接近上限）摘要
+      handoff_book、重置自身 context，從摘要重新開機
+  - 維護獨立的 **working state**（與 handoff_book 並列，結構不同）：
+    ```
+    current_goal: <user 原始請求的 1 行>
+    current_step: <e.g. awaiting reviewer reply>
+    recent_ids: [msg-id-7, msg-id-8]
+    project_state: <3-5 行滾動摘要>
+    open_questions: []
+    ```
 
 - **sub-agent**
   - 接收 AIF；回覆 AIF
@@ -73,6 +87,7 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 ## Description: <optional one-paragraph context>;
 *TO:* <role>@<model>;
 *FROM:* <role>[@<model>];
+*TYPE:* TASK | DELIVER | QUERY | SUMMARY;
 *DATE:* YYYYMMDD-HHMMSS-NN;
 *ID:* YYYYMMDD-HHMMSS-NN;
 *IN-REPLY-TO:* <prior ID>;
@@ -88,6 +103,7 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 | `## Description` | 否   | Markdown H2；若出現則分號結尾；可為 "non" / 略                       |
 | `*TO:*`          | 是   | `<role>@<model>`，e.g. `agent-pm@opus-4.7`；分號結尾                |
 | `*FROM:*`        | 是   | `<role>` 或 `<role>@<model>`；`main-agent` 可省略 `@model`；分號結尾 |
+| `*TYPE:*`        | 是   | enum：`TASK` / `DELIVER` / `QUERY` / `SUMMARY`；分號結尾            |
 | `*DATE:*`        | 是   | `YYYYMMDD-HHMMSS-NN`，與 `*ID:*` 內容相同（human-glance 用）        |
 | `*ID:*`          | 是   | `YYYYMMDD-HHMMSS-NN`；由 main 在寫入 handoff_book 時生成            |
 | `*IN-REPLY-TO:*` | 條件 | 引用先前訊息的 `ID`；sub→main 反問既有上下文時必填                  |
@@ -109,6 +125,37 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 - 唯一例外：`*MESSAGE:*` 那行（後接 body，無分號）。
 - 理由：明確的行分隔符有利於 model 在 fallback 抽取時定位欄位邊界。
 
+### TYPE enum (initial set)
+
+| TYPE      | 方向         | 用途                                                          |
+|-----------|--------------|---------------------------------------------------------------|
+| `TASK`    | main → sub   | 指派工作；包含純 forward 情境（body 至少含 `INPUTS:` 引用 IDs）|
+| `DELIVER` | sub → main   | 回覆工作結果                                                  |
+| `QUERY`   | sub → main   | 反問既有上下文；必填 `IN-REPLY-TO`（body schema 待定）         |
+| `SUMMARY` | main → main  | main 產出的摘要訊息；body 必含 `SOURCE_IDS: [...]` 與摘要內容 |
+
+Future types（`REVIEW_REQ` / `FEEDBACK` / `REVISE` / `ACK` / `CANCEL`
+/ `CLARIFY`）是否進入 Core 待後續討論。預設它們屬於 application
+extension 而非 Core。
+
+### Recipient rule (single-value `TO`)
+
+`*TO:*` 強制單值。一次要 dispatch 給 N 個 sub-agent **必須拆成 N 則
+TASK，各有獨立 ID**。同樣 body 內容可重複；目的是讓每個 sub 的
+DELIVER 都能用 `IN-REPLY-TO` 對齊到唯一的 spawn 訊息。
+
+### Logging rule (invariant)
+
+**所有 AIF 訊息（不論 TYPE）必須寫入 `handoff_book.md`，無例外。**
+
+具體後果：
+
+- 純 forward 的 spawn → 仍寫一則 `TYPE: TASK`，body 含 `INPUTS: [<id>, <id>]`
+- main 的中間摘要 → 寫一則 `TYPE: SUMMARY`，body 含 `SOURCE_IDS: [...]`
+  及摘要內容
+- 這條規則是 main 的 hard invariant：「有 AIF message 必有 handoff_book
+  entry」。違反會破壞 self-recovery 與 audit chain。
+
 ## 4. Example
 
 ```
@@ -116,6 +163,7 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 ## Description: Initial scoping for the Q3 reporting refactor;
 *TO:* agent-pm@opus-4.7;
 *FROM:* main-agent;
+*TYPE:* TASK;
 *DATE:* 20260521-083312-00;
 *ID:* 20260521-083312-00;
 *MESSAGE:*
@@ -129,6 +177,7 @@ Reply 範例（sub-agent → main，含上下文引用）：
 ## Description: non;
 *TO:* main-agent;
 *FROM:* agent-pm@opus-4.7;
+*TYPE:* DELIVER;
 *DATE:* 20260521-083315-01;
 *ID:* 20260521-083315-01;
 *IN-REPLY-TO:* 20260521-083312-00;
@@ -143,7 +192,10 @@ Reply 範例（sub-agent → main，含上下文引用）：
 | Header 用 Markdown heading + `*KEY:*` | 接近 `handoff_book_spec.md` 的極簡格式             |
 | 強制分號                              | 給 model 明確的欄位邊界（fallback 抽取友好）       |
 | `TO: role@model`                      | main 需要從 header parse 出要呼叫哪個 model        |
+| `TYPE:` enum                          | 讓 main 不靠語意推論就能 route / index 訊息        |
 | ID = DATE + NN                        | 單值即時間戳，無需額外 sequence file               |
+| 所有訊息必入 handoff_book              | 保證 `IN-REPLY-TO` 鏈不斷 + self-recovery 不缺片段 |
+| 單值 `TO`，多收件人拆訊息              | 每個 sub 的 DELIVER 都能對齊唯一 spawn ID           |
 | Sub 無檔案 I/O                        | 工具不對稱是結構性事實，spec 反映此事實            |
 | Main 是唯一 writer                    | 單一 source of truth，避免 race；支援 self-recovery |
 
@@ -151,28 +203,40 @@ Reply 範例（sub-agent → main，含上下文引用）：
 
 以下項目刻意留白，需後續討論／量測後再寫：
 
-1. **Body schema** — 最小核心應只含 TASK / DELIVER 兩種，或更原始的
-   「結構化 free-form」？「M2M 不用講人話」對 body 內部的約束程度需要
-   明確化。
-2. **Sub-agent QUERY 路徑** — header 已支援 `*IN-REPLY-TO:*`，但 body
-   層級的 QUERY/CLARIFY schema 還沒定。Sub 反問是 v3 的一等公民（已
-   確認），實作細節待定。
+1. **Body schema (per TYPE)** — TASK / DELIVER / QUERY / SUMMARY 各自
+   的 body 必填／選填欄位。已知約束：
+   - TASK body 至少含 goal 或 `INPUTS:`（純 forward 也算合法）
+   - SUMMARY body 必含 `SOURCE_IDS:` 與摘要內容
+   - DELIVER / QUERY body schema 待定
+2. **QUERY body schema 細節** — header 已支援 `*IN-REPLY-TO:*` 與
+   `*TYPE: QUERY*`。Body 如何表達「我問的是什麼」（指定欄位 / 引用片段 /
+   自由提問）尚未定。
 3. **I3「single-file installable」重新界定** — v2.1 的 I3 假設 spec
-   要能 self-contained 載入；hub-spoke 模型下，main 載入完整 spec、sub
-   只看 inline stub，I3 需降格為「Hub Spec 本身是 single-file」，不再
-   是全域 invariant。
+   要能 self-contained 載入；hub-spoke 模型下 main 載入完整 Hub Spec、
+   sub 只看 inline stub，I3 需降格為「Hub Spec 本身是 single-file」，
+   不再是全域 invariant。
 4. **Format-agnostic core** — 「連 JSON 都沒關係」是強原則還是
    aspirational？若強制，v3 Core 必須只定義語意，syntax 可替換
    （Markdown / JSON / YAML / KV 皆合法的同構表示）。
-5. **handoff_book.md 角色** — 是 v3 的 default transport（規範性），
-   還是 reference transport（示範性，可替換）？
-6. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
+5. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
    （aif-dialect 本身只是 spec repo，不適合做 runtime 量測）。
-7. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
+6. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
    都符合 hub-spoke 的工具不對稱前提？若否，v3 是否需要 fallback 模式？
+
+### 已決議（不再 pending）
+
+- `handoff_book.md` 是 v3 的**規範性 transport**（normative），非示範
+  替代品；單一 writer = main-agent
+- `*TYPE:*` 欄位入 Core header，初始 enum：TASK / DELIVER / QUERY / SUMMARY
+- 多收件人 spawn 必拆成多則 TASK（單值 `TO`）
+- 所有 AIF 訊息必入 handoff_book（無例外，含純 forward）
+- main 視兩層遺忘（軟性 / 硬性）為 routine 機制，非 emergency
 
 ---
 
 ## Changelog (this draft)
 
 - 2026-05-21: 初稿。確立 hub-spoke 拓樸、M2M strict 目標、header schema。
+- 2026-05-21: 補 `*TYPE:*` 欄位（enum: TASK/DELIVER/QUERY/SUMMARY）、
+  all-spawns-logged invariant、main 兩層 context 管理 + working state、
+  單值 `TO` 規則。確認 `handoff_book.md` 為 normative transport。
