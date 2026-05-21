@@ -88,7 +88,6 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 *TO:* <role>@<model>;
 *FROM:* <role>[@<model>];
 *TYPE:* TASK | DELIVER | QUERY | CLARIFY | SUMMARY;
-*DATE:* YYYYMMDD-HHMMSS-NN;
 *ID:* YYYYMMDD-HHMMSS-NN;
 *IN-REPLY-TO:* <prior ID>;
 *MESSAGE:*
@@ -104,7 +103,6 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 | `*TO:*`          | 是   | `<role>@<model>`，e.g. `agent-pm@opus-4.7`；分號結尾                |
 | `*FROM:*`        | 是   | `<role>` 或 `<role>@<model>`；`main-agent` 可省略 `@model`；分號結尾 |
 | `*TYPE:*`        | 是   | enum：`TASK` / `DELIVER` / `QUERY` / `CLARIFY` / `SUMMARY`；分號結尾 |
-| `*DATE:*`        | 是   | `YYYYMMDD-HHMMSS-NN`，與 `*ID:*` 內容相同（human-glance 用）        |
 | `*ID:*`          | 是   | `YYYYMMDD-HHMMSS-NN`；由 main 在寫入 handoff_book 時生成            |
 | `*IN-REPLY-TO:*` | 條件 | 引用先前訊息的 `ID`；sub→main 反問既有上下文時必填                  |
 | `*MESSAGE:*`     | 是   | body 起點（**這一行不加分號**，因為其後接 body）                    |
@@ -116,8 +114,6 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 - 規則：同一 `HHMMSS` 內 main spawn 多個訊息時遞增 `NN`，避免撞號
 - 上限：每秒 100 則訊息。對 hub-spoke 拓樸足夠（main 不可能在 1 秒內
   spawn 100 個 sub）
-- `DATE` 與 `ID` 內容相同 — 兩欄並存是為了讓人 glance log 時不必額外
-  parse；機器 parse 任一即可
 
 ### 分號規則
 
@@ -170,57 +166,65 @@ DELIVER 都能用 `IN-REPLY-TO` 對齊到唯一的 spawn 訊息。
 
 ## 4. Body schema (per TYPE)
 
-Body 接在 `*MESSAGE:*` 之後，至 `===END_OF_MESSAGE===` 為止。Body 以
-**`KEY:` + value** 為主，列表用 YAML-style 縮排 bullet (`  - ...`)。
+Body 接在 `*MESSAGE:*` 之後，至 `===END_OF_MESSAGE===` 為止。Body 是
+**一個 fenced JSON code block**，使用 snake_case key，單一 JSON object。
 **禁止 NLU 宣染**（problem restatement / polite preamble / 自由段落）。
+
+格式：
+````
+```json
+{ ... single JSON object ... }
+```
+===END_OF_MESSAGE===
+````
 
 ### 4.1 TASK body
 
 | Field          | 必須 | 說明                                                                  |
 |----------------|------|-----------------------------------------------------------------------|
-| `GOAL:`        | 是   | 一行目標。即使是純 forward 也要寫，作為人類 glance 的索引              |
-| `DELIVERABLE:` | 是   | 子欄位 `format` + `required_fields` + `acceptance`；告訴 sub 回什麼形狀 |
-| `INPUTS:`      | 條件 | 引用的訊息 ID 列表。Fan-in / 純 forward 時必填                         |
-| `SCOPE:`       | 否   | bullet list；scope 細節                                                |
-| `CONSTRAINTS:` | 否   | bullet list；硬性限制                                                  |
+| `goal`         | 是   | string；一行目標。即使是純 forward 也要寫，作為人類 glance 的索引      |
+| `deliverable`  | 是   | object；子欄位 `format` + `required_fields` + `acceptance`；告訴 sub 回什麼形狀 |
+| `inputs`       | 條件 | string array；引用的訊息 ID 列表。Fan-in / 純 forward 時必填           |
+| `scope`        | 否   | string array；scope 細節                                               |
+| `constraints`  | 否   | string array；硬性限制                                                 |
 
 ### 4.2 DELIVER body
 
-| Field      | 必須 | 說明                                                                  |
-|------------|------|-----------------------------------------------------------------------|
-| `STATUS:`  | 是   | enum：`COMPLETED` / `PARTIAL` / `FAILED`                              |
-| `SUMMARY:` | 是   | 一行摘要                                                              |
-| `RESULT:`  | 是   | 結構化 payload；shape 由觸發 TASK 的 `DELIVERABLE.format` 決定         |
-| `NOTES:`   | 否   | 補充欄位 / 偏離說明（仍要結構化）                                      |
+| Field     | 必須 | 說明                                                                  |
+|-----------|------|-----------------------------------------------------------------------|
+| `status`  | 是   | enum：`"COMPLETED"` / `"PARTIAL"` / `"FAILED"`                        |
+| `summary` | 是   | string；一行摘要                                                      |
+| `result`  | 是   | object；結構化 payload；shape 由觸發 TASK 的 `deliverable.format` 決定 |
+| `notes`   | 否   | string 或 object；補充欄位 / 偏離說明（仍要結構化）                    |
 
 ### 4.3 SUMMARY body
 
-| Field         | 必須 | 說明                                              |
-|---------------|------|---------------------------------------------------|
-| `SOURCE_IDS:` | 是   | 被摘要訊息的 ID 列表                              |
-| `SUMMARY:`    | 是   | 結構化摘要內容（key-value 為主，禁止自由段落）     |
+| Field        | 必須 | 說明                                              |
+|--------------|------|---------------------------------------------------|
+| `source_ids` | 是   | string array；被摘要訊息的 ID 列表                |
+| `summary`    | 是   | object；結構化摘要內容（key-value 為主，禁止自由段落） |
 
 ### 4.4 QUERY body
 
 QUERY 由 sub 發給 main，反問既有 TASK 的細節。Header 必須含
 `*IN-REPLY-TO:*`，指向 sub 當前處理的 **TASK ID**。
 
-| Field             | 必須 | 說明                                                                |
-|-------------------|------|---------------------------------------------------------------------|
-| `QUESTION:`       | 是   | 一行問句                                                            |
-| `BLOCKING:`       | 是   | bool；`true` = sub 停工等待，`false` = sub 用 best-guess 繼續做      |
-| `FIELDS:`         | 否   | bullet list；具體欠缺哪些欄位 / 決策點                              |
-| `CONTEXT_NEEDED:` | 否   | bullet list；sub 認為自己缺什麼背景才能繼續                          |
+| Field            | 必須 | 說明                                                                |
+|------------------|------|---------------------------------------------------------------------|
+| `question`       | 是   | string；一行問句                                                    |
+| `blocking`       | 是   | bool；`true` = sub 停工等待，`false` = sub 用 best-guess 繼續做      |
+| `fields`         | 否   | string array；具體欠缺哪些欄位 / 決策點                             |
+| `context_needed` | 否   | string array；sub 認為自己缺什麼背景才能繼續                         |
 
 ### 4.5 CLARIFY body
 
 CLARIFY 由 main 回應 sub 的 QUERY。Header 必須含 `*IN-REPLY-TO:*`,
 指向 **QUERY 的 ID**。
 
-| Field     | 必須 | 說明                                                                |
-|-----------|------|---------------------------------------------------------------------|
-| `ANSWER:` | 是   | 結構化回答；若 QUERY 含 `FIELDS:`，建議以同名 key 對齊回填            |
-| `NOTES:`  | 否   | 補充說明                                                            |
+| Field    | 必須 | 說明                                                                |
+|----------|------|---------------------------------------------------------------------|
+| `answer` | 是   | object 或 string；結構化回答；若 QUERY 含 `fields`，建議以同名 key 對齊回填 |
+| `notes`  | 否   | string；補充說明                                                    |
 
 **Reply chain rule**：sub 收到 CLARIFY 後恢復原 TASK；最終 DELIVER 的
 `*IN-REPLY-TO:*` 仍指回**原 TASK** ID（不指 CLARIFY），保持 TASK→DELIVER
@@ -234,10 +238,18 @@ CLARIFY 由 main 回應 sub 的 QUERY。Header 必須含 `*IN-REPLY-TO:*`,
 *TO:* agent-pm@opus-4.7;
 *FROM:* main-agent;
 *TYPE:* TASK;
-*DATE:* 20260521-083312-00;
 *ID:* 20260521-083312-00;
 *MESSAGE:*
-<body — structured per §4, no NLU prose>
+```json
+{
+  "goal": "Scope the Q3 reporting refactor project.",
+  "deliverable": {
+    "format": "milestone-list",
+    "required_fields": ["id", "name", "depends_on", "est_effort_hours", "acceptance_criteria"]
+  }
+}
+```
+===END_OF_MESSAGE===
 ```
 
 Reply 範例（sub-agent → main，含上下文引用）：
@@ -248,11 +260,19 @@ Reply 範例（sub-agent → main，含上下文引用）：
 *TO:* main-agent;
 *FROM:* agent-pm@opus-4.7;
 *TYPE:* DELIVER;
-*DATE:* 20260521-083315-01;
 *ID:* 20260521-083315-01;
 *IN-REPLY-TO:* 20260521-083312-00;
 *MESSAGE:*
-<structured plan>
+```json
+{
+  "status": "COMPLETED",
+  "summary": "Scoping plan produced; 4 milestones identified.",
+  "result": {
+    "milestones": []
+  }
+}
+```
+===END_OF_MESSAGE===
 ```
 
 ## 6. 為什麼這樣設計
@@ -263,7 +283,7 @@ Reply 範例（sub-agent → main，含上下文引用）：
 | 強制分號                              | 給 model 明確的欄位邊界（fallback 抽取友好）       |
 | `TO: role@model`                      | main 需要從 header parse 出要呼叫哪個 model        |
 | `TYPE:` enum                          | 讓 main 不靠語意推論就能 route / index 訊息        |
-| ID = DATE + NN                        | 單值即時間戳，無需額外 sequence file               |
+| ID = YYYYMMDD-HHMMSS-NN               | 單值即時間戳，無需額外 sequence file               |
 | 所有訊息必入 handoff_book              | 保證 `IN-REPLY-TO` 鏈不斷 + self-recovery 不缺片段 |
 | 單值 `TO`，多收件人拆訊息              | 每個 sub 的 DELIVER 都能對齊唯一 spawn ID           |
 | Sub 無檔案 I/O                        | 工具不對稱是結構性事實，spec 反映此事實            |
@@ -294,11 +314,15 @@ Reply 範例（sub-agent → main，含上下文引用）：
 - 所有 AIF 訊息必入 handoff_book（無例外，含純 forward）
 - main 視兩層遺忘（軟性 / 硬性）為 routine 機制，非 emergency
 - Message terminator = `===END_OF_MESSAGE===`（單獨一行；前後留空行）
-- TASK / DELIVER / SUMMARY body schema 為 normative（§4），key:value
-  + YAML 縮排 bullet、禁 NLU 宣染
+- TASK / DELIVER / SUMMARY body schema 為 normative（§4），fenced JSON
+  block + snake_case key、禁 NLU 宣染
 - `CLARIFY` 加入 TYPE enum（5-entry）；QUERY / CLARIFY body schema
   為 normative（§4.4 / §4.5）。Reply chain：QUERY↔CLARIFY 是支線，
   TASK→DELIVER 主鏈不受影響
+- `*DATE:*` 欄位移除（與 `*ID:*` 重複，冗餘）；ID 格式 `YYYYMMDD-HHMMSS-NN`
+  已足夠 human-glance 與 machine-parse
+- Body 格式鎖定為 fenced JSON（`\`\`\`json ... \`\`\``），snake_case key；
+  消除 NLU drift，支援 JSON Schema validation
 
 ---
 
@@ -320,3 +344,10 @@ Reply 範例（sub-agent → main，含上下文引用）：
   schema 升格 normative。確立 reply chain rule：QUERY↔CLARIFY 是支線，
   最終 DELIVER 的 `IN-REPLY-TO` 仍指回原 TASK。Mini-walkthrough 見
   `examples/v3-walkthrough/query_clarify.md`。
+- 2026-05-21: 移除 `*DATE:*` 欄位（與 `*ID:*` 冗餘）。Header template、
+  field rules table、ID 規則細節、§5 examples、§6 表格均已更新。
+  Walkthrough files 同步移除所有 `*DATE:*` 行。
+- 2026-05-21: Body 格式改為 fenced JSON（`\`\`\`json ... \`\`\``）+ snake_case
+  key。§4 所有 TYPE schema 欄位名稱由 `KEY:` 形式改為 JSON key 形式。
+  §5 examples 與兩個 walkthrough 檔案（handoff_book.md、query_clarify.md）
+  全部 body 已轉換為 fenced JSON。README.md 更新 Body schemas 描述。
