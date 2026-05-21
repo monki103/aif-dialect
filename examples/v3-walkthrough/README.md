@@ -60,35 +60,16 @@ rules it expands to **14**:
    only M1-M3 went through dispatch. The walkthrough stops at "phase 1
    closed", which is the same place the user's original scenario stopped.
 
-## Body schemas observed (not yet normative)
+## Body schemas
 
-The walkthrough used these body shapes; they are first-cut proposals and
-will be refined in `DESIGN-v3-draft.md §6 item 1`:
-
-### TASK body
-```
-GOAL: <one-line objective>           # required unless pure forward
-INPUTS: [<id>, ...]                  # optional; required for forward / fan-in
-SCOPE / CONSTRAINTS / DELIVERABLE    # context-dependent
-```
-
-### DELIVER body
-```
-STATUS: COMPLETED | PARTIAL | FAILED
-SUMMARY: <one line>
-RESULT: <structured payload, type-specific>
-```
-
-### SUMMARY body
-```
-SOURCE_IDS: [<id>, ...]              # required
-SUMMARY: <structured key-value content>
-```
+TASK / DELIVER / SUMMARY body shapes are now **normative**, defined in
+`DESIGN-v3-draft.md §4`. The walkthrough's bodies conform to those
+schemas. QUERY / CLARIFY bodies are still pending (see `§7 item 1`).
 
 ### Message terminator
-The walkthrough uses `===END_OF_MESSAGE===` as a line separator between
-messages in `handoff_book.md`. **Not yet defined in the spec** — see
-draft §6 pending.
+
+`===END_OF_MESSAGE===` on its own line — also **normative** (see
+`DESIGN-v3-draft.md §3` Message terminator subsection).
 
 ## Token cost (rough)
 

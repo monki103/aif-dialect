@@ -76,7 +76,7 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 - ID 的價值在於「sub-agent 可以在 reply 中引用既有訊息」，讓 main
   能拼湊出多輪 sub↔main 討論的線串
 - v2.1 的 invariant **I3 (single-file installable)** 在 hub-spoke 模型下
-  必須重新界定 — 詳見 §6 Pending
+  必須重新界定 — 詳見 §7 Pending
 
 ## 3. Header Schema (v3.0-draft)
 
@@ -168,7 +168,44 @@ DELIVER 都能用 `IN-REPLY-TO` 對齊到唯一的 spawn 訊息。
   - 與 v2.1 / `handoff_book_spec.md` 維持連續
   - `---` 與 Markdown 表格 / horizontal rule / YAML front-matter 衝突
 
-## 4. Example
+## 4. Body schema (per TYPE)
+
+Body 接在 `*MESSAGE:*` 之後，至 `===END_OF_MESSAGE===` 為止。Body 以
+**`KEY:` + value** 為主，列表用 YAML-style 縮排 bullet (`  - ...`)。
+**禁止 NLU 宣染**（problem restatement / polite preamble / 自由段落）。
+
+### 4.1 TASK body
+
+| Field          | 必須 | 說明                                                                  |
+|----------------|------|-----------------------------------------------------------------------|
+| `GOAL:`        | 是   | 一行目標。即使是純 forward 也要寫，作為人類 glance 的索引              |
+| `DELIVERABLE:` | 是   | 子欄位 `format` + `required_fields` + `acceptance`；告訴 sub 回什麼形狀 |
+| `INPUTS:`      | 條件 | 引用的訊息 ID 列表。Fan-in / 純 forward 時必填                         |
+| `SCOPE:`       | 否   | bullet list；scope 細節                                                |
+| `CONSTRAINTS:` | 否   | bullet list；硬性限制                                                  |
+
+### 4.2 DELIVER body
+
+| Field      | 必須 | 說明                                                                  |
+|------------|------|-----------------------------------------------------------------------|
+| `STATUS:`  | 是   | enum：`COMPLETED` / `PARTIAL` / `FAILED`                              |
+| `SUMMARY:` | 是   | 一行摘要                                                              |
+| `RESULT:`  | 是   | 結構化 payload；shape 由觸發 TASK 的 `DELIVERABLE.format` 決定         |
+| `NOTES:`   | 否   | 補充欄位 / 偏離說明（仍要結構化）                                      |
+
+### 4.3 SUMMARY body
+
+| Field         | 必須 | 說明                                              |
+|---------------|------|---------------------------------------------------|
+| `SOURCE_IDS:` | 是   | 被摘要訊息的 ID 列表                              |
+| `SUMMARY:`    | 是   | 結構化摘要內容（key-value 為主，禁止自由段落）     |
+
+### 4.4 QUERY / CLARIFY body
+
+待 §7 確認後補（QUERY 屬 sub→main 反問，CLARIFY 為 main 對 QUERY 的
+回覆）。CLARIFY 尚未加入 §3 的 TYPE enum，需一併拍板。
+
+## 5. Example
 
 ```
 # Title: A new project analysis;
@@ -179,7 +216,7 @@ DELIVER 都能用 `IN-REPLY-TO` 對齊到唯一的 spawn 訊息。
 *DATE:* 20260521-083312-00;
 *ID:* 20260521-083312-00;
 *MESSAGE:*
-<body — structured, no NLU prose; schema TBD in §6>
+<body — structured per §4, no NLU prose>
 ```
 
 Reply 範例（sub-agent → main，含上下文引用）：
@@ -197,7 +234,7 @@ Reply 範例（sub-agent → main，含上下文引用）：
 <structured plan>
 ```
 
-## 5. 為什麼這樣設計
+## 6. 為什麼這樣設計
 
 | 決定                                  | 對照原始意圖                                       |
 |---------------------------------------|----------------------------------------------------|
@@ -211,29 +248,27 @@ Reply 範例（sub-agent → main，含上下文引用）：
 | Sub 無檔案 I/O                        | 工具不對稱是結構性事實，spec 反映此事實            |
 | Main 是唯一 writer                    | 單一 source of truth，避免 race；支援 self-recovery |
 
-## 6. Pending（不在本 draft 內）
+## 7. Pending（不在本 draft 內）
 
 以下項目刻意留白，需後續討論／量測後再寫：
 
-1. **Body schema (per TYPE)** — TASK / DELIVER / QUERY / SUMMARY 各自
-   的 body 必填／選填欄位。已知約束：
-   - TASK body 至少含 `GOAL:` 或 `INPUTS:`（純 forward 也算合法）
-   - SUMMARY body 必含 `SOURCE_IDS:` 與摘要內容
-   - DELIVER / QUERY body schema 待定
-   - 走訪過的初版形狀見 `examples/v3-walkthrough/`，尚未 normative
-2. **QUERY body schema 細節** — header 已支援 `*IN-REPLY-TO:*` 與
-   `*TYPE: QUERY*`。Body 如何表達「我問的是什麼」（指定欄位 / 引用片段 /
-   自由提問）尚未定。
-3. **I3「single-file installable」重新界定** — v2.1 的 I3 假設 spec
+1. **QUERY / CLARIFY body schema + TYPE enum 擴充** — QUERY (sub→main
+   反問) 與 CLARIFY (main→sub 回應) 一組。需決定：
+   - CLARIFY 是否加入 §3 TYPE enum（變 5-entry）
+   - QUERY body 表達「問什麼」的欄位設計（FIELDS / QUESTION / BLOCKING 等）
+   - CLARIFY body 回覆欄位
+   - QUERY 是否容忍 sub 自行決策（非 blocking）vs 強制阻塞等待
+   走訪場景由 step C 提供。
+2. **I3「single-file installable」重新界定** — v2.1 的 I3 假設 spec
    要能 self-contained 載入；hub-spoke 模型下 main 載入完整 Hub Spec、
    sub 只看 inline stub，I3 需降格為「Hub Spec 本身是 single-file」，
    不再是全域 invariant。
-4. **Format-agnostic core** — 「連 JSON 都沒關係」是強原則還是
+3. **Format-agnostic core** — 「連 JSON 都沒關係」是強原則還是
    aspirational？若強制，v3 Core 必須只定義語意，syntax 可替換
    （Markdown / JSON / YAML / KV 皆合法的同構表示）。
-5. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
+4. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
    （aif-dialect 本身只是 spec repo，不適合做 runtime 量測）。
-6. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
+5. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
    都符合 hub-spoke 的工具不對稱前提？若否，v3 是否需要 fallback 模式？
 
 ### 已決議（不再 pending）
@@ -245,6 +280,8 @@ Reply 範例（sub-agent → main，含上下文引用）：
 - 所有 AIF 訊息必入 handoff_book（無例外，含純 forward）
 - main 視兩層遺忘（軟性 / 硬性）為 routine 機制，非 emergency
 - Message terminator = `===END_OF_MESSAGE===`（單獨一行；前後留空行）
+- TASK / DELIVER / SUMMARY body schema 為 normative（§4），key:value
+  + YAML 縮排 bullet、禁 NLU 宣染
 
 ---
 
@@ -259,3 +296,6 @@ Reply 範例（sub-agent → main，含上下文引用）：
   `===END_OF_MESSAGE===` 待 spec 拍板）。
 - 2026-05-21: 鎖定 message terminator = `===END_OF_MESSAGE===`（單獨一行）。
   §3 補上 "Message terminator" 小節；§6 移除該 pending 項並列入已決議。
+- 2026-05-21: 加入 §4 Body schema (per TYPE)，TASK / DELIVER / SUMMARY
+  body 升格 normative；QUERY / CLARIFY 整併為 pending item 1（含 TYPE
+  enum 是否擴充至 5 entry）。其餘節次相應後移為 §5/§6/§7。
