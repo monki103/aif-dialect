@@ -9,7 +9,7 @@ between agents.
 This skill is loaded **only by the main-agent**. Sub-agents receive a
 small inline stub (defined in §9) at spawn time and do not load this
 file. For the design rationale and history of v3, see
-`DESIGN-v3-draft.md`. v2.1 spec is in git history (commit `b2f9cf3`
+`DESIGN.md`. v2.1 spec is in git history (commit `b2f9cf3`
 and earlier).
 
 ---

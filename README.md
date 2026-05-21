@@ -59,7 +59,7 @@ the user) and the others don't. The spec now follows that asymmetry:
 - Body is fenced JSON, eliminating NLU drift in agent-to-agent traffic
 
 For the full design discussion and decision history, see
-[`DESIGN-v3-draft.md`](DESIGN-v3-draft.md).
+[`DESIGN.md`](DESIGN.md).
 
 ## Install (Claude Code)
 
@@ -92,16 +92,16 @@ body shape.
 
 ```
 aif-dialect/
-├── SKILL.md                ← v3.0 normative spec (loaded by main-agent)
-├── DESIGN-v3-draft.md      ← Design rationale and decision history
+├── SKILL.md                  ← v3.0 normative spec (loaded by main-agent)
+├── DESIGN.md                 ← Design rationale and decision history
 ├── examples/
-│   └── v3-walkthrough/     ← End-to-end + QUERY/CLARIFY walkthroughs
-├── DESIGN.md               ← v2.1 design (historical)
-└── tests/, examples/*.md   ← v2.1 conformance tests + examples (legacy)
+│   ├── v3-walkthrough/       ← End-to-end + QUERY/CLARIFY walkthroughs
+│   └── v2.1-legacy/          ← v2.1 example messages (historical)
+└── tests/v2.1-legacy/        ← v2.1 conformance tests (historical)
 ```
 
-Items marked **legacy / historical** are v2.1-era artifacts kept for
-reference. The active normative spec is `SKILL.md` (v3.0).
+Items marked **historical** are v2.1-era artifacts kept for reference.
+The active normative spec is `SKILL.md` (v3.0).
 
 ---
 
@@ -208,7 +208,7 @@ NLU 對使用者的橋接），其他則沒有。Spec 反映這個事實：
   ack / cancel）用 `TASK` + 適當 body 表達
 - Body 強制 fenced JSON，徹底消除 agent 對 agent 的 NLU 漂移
 
-完整設計討論與決策歷史見 [`DESIGN-v3-draft.md`](DESIGN-v3-draft.md)。
+完整設計討論與決策歷史見 [`DESIGN.md`](DESIGN.md)。
 
 ## 安裝（Claude Code）
 
@@ -240,16 +240,16 @@ v2.1 的 `REVIEW_REQ` / `FEEDBACK` / `REVISE` / `ACK` / `CANCEL` 在 v3
 
 ```
 aif-dialect/
-├── SKILL.md                ← v3.0 規範性 spec（給 main-agent 載入）
-├── DESIGN-v3-draft.md      ← 設計理由與決策歷史
+├── SKILL.md                  ← v3.0 規範性 spec（給 main-agent 載入）
+├── DESIGN.md                 ← 設計理由與決策歷史
 ├── examples/
-│   └── v3-walkthrough/     ← 端到端 + QUERY/CLARIFY walkthrough
-├── DESIGN.md               ← v2.1 設計文件（歷史）
-└── tests/, examples/*.md   ← v2.1 合規測試與範例（legacy）
+│   ├── v3-walkthrough/       ← 端到端 + QUERY/CLARIFY walkthrough
+│   └── v2.1-legacy/          ← v2.1 範例訊息（歷史）
+└── tests/v2.1-legacy/        ← v2.1 合規測試（歷史）
 ```
 
-標示 **legacy / 歷史** 的項目是 v2.1 時期的產物，保留供查考用。當前
-規範性 spec 是 `SKILL.md`（v3.0）。
+標示 **歷史** 的項目是 v2.1 時期的產物，保留供查考用。當前規範性 spec
+是 `SKILL.md`（v3.0）。
 
 ## 研究數據（v2.1 實驗）
 

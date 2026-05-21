@@ -1,241 +1,352 @@
-# AIF Design Document
+# AIF v3.0 — Design Rationale
 
-This document records the design rationale and invariants of AIF (Agent Interchange Format). It is **not a specification** — `SKILL.md` is the spec. This document explains *why* the spec is shaped the way it is, and what must remain true across future versions.
+This document captures the design discussion and decision history that
+produced AIF v3. The normative spec is [`SKILL.md`](SKILL.md). If
+`SKILL.md` and this document disagree, `SKILL.md` wins.
 
-**Audience**:
-- Spec maintainers deciding whether a proposed change fits AIF's design
-- Profile authors deciding what belongs in core vs in a profile
-- Application authors trying to understand where the AIF boundary is
-
----
-
-## 1. What AIF Is
-
-AIF is a **machine-to-machine (M2M) dialect** for agents sharing an LLM substrate. It specifies:
-
-- How agent-to-agent messages are structured
-- How messages are identified and cross-referenced
-- How upstream context flows to a downstream agent
-
-It does **not** specify:
-- Who the agents are (role definitions belong to the application layer)
-- When to switch between AIF and natural language (an application policy)
-- How agents are dispatched, scheduled, or terminated
-- How user-facing input is translated into M2M traffic
-
-If a candidate rule talks about USER, PM, or routing, it does not belong in AIF.
+For the v2.1 design rationale, see git history (file removed in the v3
+ratification commit).
 
 ---
 
-## 2. Why AIF Exists
+## 1. Goal
 
-### 2.1 Three problems with naked NLU between agents
+**M2M 不用講人話。**
 
-1. **Semantic ambiguity.** Agents trained to be helpful produce verbose, hedged replies. Downstream must re-parse intent on every hop; errors compound.
-2. **Feedback bloat.** Reviewer→implementer cycles inflate token usage as each side wraps its message in NLU framing ("Thanks for sending this. I noticed a few things you might want to consider…").
-3. **Sub-agent context loss.** Sub-agents are typically single-shot: an Agent-tool spawn gives the sub-agent its prompt, then discards the context when it returns. Without external persistence, cross-call memory is impossible.
+Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，不含 NLU
+宣染（problem-restatement、polite preamble、emotive filler、explain-back
+之類的東西）。NLU 只出現在 user ↔ main-agent 這一段。
 
-### 2.2 What AIF does about each
+這個目標比 v2.1 更嚴格。v2.1 允許 markdown body 自由書寫；v3 要求 body
+本身就是結構化資料。
 
-| Problem | Mechanism |
-|---|---|
-| Ambiguity | Typed envelope + TYPE-specific body schema. The reader knows what fields exist before reading. |
-| Feedback bloat | Structured fields (`VERDICT`, `ISSUES` with `SEV`/`LOCATION`/`DESC`/`FIX`) leave no place for NLU embellishment. |
-| Sub-agent context loss | First-class **message ID** + a `RESOLVE(id)` contract backed by an interchangeable transport. |
-
-The third item is the reason transport is core to AIF rather than an extension.
-
----
-
-## 3. Design Invariants
-
-These must hold across all spec versions. A change that violates one is by definition no longer AIF.
-
-### I1. Role independence
-
-AIF works regardless of who the agents are. Source examples may use suggestive names (`agent_a`, `agent_searcher`) but the spec must not require any specific role hierarchy, workflow shape, or agent vocabulary.
-
-**Test**: remove all `roles/` files from this repo. The AIF spec must remain coherent.
-
-### I2. Pure M2M scope
-
-AIF describes how two agents talk to each other and how messages move between them. Everything else — when to engage AIF, how to translate to a user, who picks which model — belongs to the application layer.
-
-**Test**: SKILL.md reads like a protocol spec, not a system architecture document.
-
-### I3. Single-file installable
-
-The minimal install of AIF is one file: `SKILL.md`. An agent given only this file as context must be able to send and receive valid AIF messages.
-
-**Test**: an LLM with only SKILL.md as system context can produce a valid TASK and parse a valid DELIVER.
-
-### I4. Semantic precision via schema
-
-Every message has a typed envelope (`FROM`/`TO`/`TYPE`/`ID`/`REF`/`REPORT_TO`) and a TYPE-specific body schema. Unknown fields are ignored (forward compatibility); missing required fields cause rejection.
-
-### I5. Structural compression of feedback
-
-Cross-agent feedback uses structured fields, not prose. The schema actively forbids NLU framing by giving authors no field for it.
-
-### I6. Transport is core, implementations are profiles
-
-Persistent message addressability is a first-class AIF concern. The core spec defines:
-- Message ID format requirements (uniqueness, addressability)
-- A `RESOLVE(id) → message` contract — given an ID, downstream can obtain the referenced message
-- That implementations may back this with a file, a broker, in-memory store, etc.
-
-Concrete implementations live in `profiles/`. The abstraction lives in core.
-
-**Test**: SKILL.md can describe the ID/RESOLVE contract without naming any specific transport.
-
-### I7. Two context-handoff policies, one ID mechanism
-
-Sub-agents are single-shot. When agent A dispatches to B, B starts with no prior context. AIF offers two policies for transferring upstream context:
-
-| Policy | Field combo | Trade-off |
-|---|---|---|
-| **By-reference** | `CONTEXT_REF: [id1, id2, ...]` | B reads originals (high fidelity, more tokens) |
-| **By-summary** | `CONTEXT_SUMMARY: "..."` + `CONTEXT_SOURCE: [id1, id2, ...]` | B reads A's digest (low tokens; source IDs preserved for audit) |
-
-Both share one underlying mechanism: **every message has a globally addressable ID, and the transport provides `RESOLVE(id)`**. Without this, by-reference is impossible and by-summary cannot be audited.
-
-The policies are non-exclusive: a TASK may carry both (summary + IDs) so B has a fast path and a verification path.
-
-### I8. English-default for M2M traffic
-
-The default working language for all M2M traffic is **English**. Agents SHOULD use English in:
-
-- All AIF body free-form string fields (`GOAL`, `SUMMARY`, `DESC`, `NOTE`, etc.)
-- Transport envelope fields that carry prose (e.g., `Title:` in file-backed transport)
-
-**Override conditions**:
-- The user-task explicitly requires another working language (e.g., a localization task, content authored in a target locale)
-- The application has set a different M2M working language for the deployment
-
-**Boundary rule**: translating the final result back to the user's natural language is the **application layer's** responsibility (the language gateway). AIF Core only stipulates that M2M defaults to English; the user-locale switch happens outside AIF.
-
-**Rationale**: LLM substrates are uniformly fluent in English; defaulting reduces translation drift between agents, keeps logs consistent for audit, and matches the densest part of model training data. It also gives the application a clean rule to remember: *every hop inside AIF is English; the last hop out switches to user locale.*
-
-**Test**: example M2M chains in SKILL.md and in profile examples are entirely English unless explicitly demonstrating the override case.
-
----
-
-## 4. Three-Layer Architecture
+## 2. Topology (Hub-Spoke)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Application Layer  (role-aware, opinionated)                │
-│  • Role definitions (agent_pm, agent_rd, agent_reviewer, …) │
-│  • Routing policies (when NLU, when AIF, who dispatches)    │
-│  • User-facing translation (language gateway)               │
-│  • Commands / entry points                                  │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ uses
+   USER  ◀── NLU ──▶  MAIN-AGENT  ◀── AIF ──▶  SUB-AGENT(s)
+                          │
                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ AIF Core  (role-agnostic, pure M2M spec)                    │
-│  • Message format (header + body, <aif> wrapper, fallback)  │
-│  • TYPEs and body schemas                                   │
-│  • ID system (uniqueness, REF / CONTEXT_REF / SOURCE)       │
-│  • Transport abstraction (RESOLVE(id) contract)             │
-│  • Two context-handoff policies (by-ref, by-summary)        │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ implemented by
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Transport Profiles  (interchangeable implementations)       │
-│  • file-backed-transport  (append-only log)                 │
-│  • in-memory-transport    (single session, future)          │
-│  • broker-transport       (Redis / SQS / NATS, future)      │
-└─────────────────────────────────────────────────────────────┘
+                   handoff_book.md     (file-backed; main owns)
 ```
 
-**Layering rule**: code in a lower layer must not name anything from a higher layer. AIF Core does not mention `agent_pm`. A transport profile does not interpret `TYPE: TASK` semantics — it treats the body as opaque payload.
+### 角色職責
+
+- **main-agent**
+  - NLU ↔ AIF 翻譯
+  - spawn / orchestrate sub-agents
+  - 唯一對 `handoff_book.md` 有讀寫權的角色
+  - 為每則訊息生成 `ID`
+  - **每次 sub-agent spawn 必產生一則 TASK 訊息進 handoff_book**
+    （即使是純 forward，body 也以 `INPUTS:` 列出引用的 ID，確保
+    `IN-REPLY-TO` 鏈不斷）
+  - 把既有 message 從 handoff_book 抽出，inline 注入到新 sub-agent
+    的 launch prompt 中（context assignment）
+  - **兩層 context 管理**（v3 視為 routine，非 emergency）：
+    - 軟性遺忘：每輪 sub 對話結束後，main 不再把 verbatim msg 重新
+      塞進 prompt，改以 ID + working state 摘要引用
+    - 硬性遺忘：在自然 checkpoint（cycle 結束 / token 接近上限）摘要
+      handoff_book、重置自身 context，從摘要重新開機
+  - 維護獨立的 **working state**（與 handoff_book 並列，結構不同）：
+    ```
+    current_goal: <user 原始請求的 1 行>
+    current_step: <e.g. awaiting reviewer reply>
+    recent_ids: [msg-id-7, msg-id-8]
+    project_state: <3-5 行滾動摘要>
+    open_questions: []
+    ```
+
+- **sub-agent**
+  - 接收 AIF；回覆 AIF
+  - **sessionless** — 無自身狀態，不存歷史，可隨時被重新 spawn
+  - 不直接讀寫 `handoff_book.md`
+  - 不直接 spawn 下游 sub-agent
+
+- **handoff_book.md**
+  - append-only message log
+  - ground truth
+  - 同時支援：
+    1. sub-agent 跨 spawn 的 context 連續性（透過 main 重新賦予）
+    2. main-agent 自身的 context 壓縮與還原
+
+### 設計後果
+
+- Sub-agent 不需要載入完整 AIF spec；只需要極小的 reply schema（後續
+  以 stub 形式定義）
+- ID 的價值在於「sub-agent 可以在 reply 中引用既有訊息」，讓 main
+  能拼湊出多輪 sub↔main 討論的線串
+- v2.1 的 invariant **I3 (single-file installable)** 在 hub-spoke 模型下
+  必須重新界定 — 詳見 §7 Pending
+
+## 3. Header Schema (v3.0-draft)
+
+每則 AIF 訊息以下列 header 起始：
+
+```
+# Title: <single-line subject>;
+## Description: <optional one-paragraph context>;
+*TO:* <role>@<model>;
+*FROM:* <role>[@<model>];
+*TYPE:* TASK | DELIVER | QUERY | CLARIFY | SUMMARY;
+*ID:* YYYYMMDD-HHMMSS-NN;
+*IN-REPLY-TO:* <prior ID>;
+*MESSAGE:*
+<body>
+```
+
+### Field rules
+
+| Field            | 必須 | 格式 / 規則                                                         |
+|------------------|------|---------------------------------------------------------------------|
+| `# Title`        | 是   | Markdown H1，單行；分號結尾                                         |
+| `## Description` | 否   | Markdown H2；若出現則分號結尾；可為 "non" / 略                       |
+| `*TO:*`          | 是   | `<role>@<model>`，e.g. `agent-pm@opus-4.7`；分號結尾                |
+| `*FROM:*`        | 是   | `<role>` 或 `<role>@<model>`；`main-agent` 可省略 `@model`；分號結尾 |
+| `*TYPE:*`        | 是   | enum：`TASK` / `DELIVER` / `QUERY` / `CLARIFY` / `SUMMARY`；分號結尾 |
+| `*ID:*`          | 是   | `YYYYMMDD-HHMMSS-NN`；由 main 在寫入 handoff_book 時生成            |
+| `*IN-REPLY-TO:*` | 條件 | 引用先前訊息的 `ID`；sub→main 反問既有上下文時必填                  |
+| `*MESSAGE:*`     | 是   | body 起點（**這一行不加分號**，因為其後接 body）                    |
+
+### ID 規則細節
+
+- 格式：`YYYYMMDD-HHMMSS-NN`
+- `NN` = sub-second counter，00–99
+- 規則：同一 `HHMMSS` 內 main spawn 多個訊息時遞增 `NN`，避免撞號
+- 上限：每秒 100 則訊息。對 hub-spoke 拓樸足夠（main 不可能在 1 秒內
+  spawn 100 個 sub）
+
+### 分號規則
+
+- 所有 header 行強制以 `;` 結尾。
+- 唯一例外：`*MESSAGE:*` 那行（後接 body，無分號）。
+- 理由：明確的行分隔符有利於 model 在 fallback 抽取時定位欄位邊界。
+
+### TYPE enum (initial set)
+
+| TYPE      | 方向         | 用途                                                              |
+|-----------|--------------|-------------------------------------------------------------------|
+| `TASK`    | main → sub   | 指派工作；包含純 forward 情境（body 至少含 `INPUTS:` 引用 IDs）    |
+| `DELIVER` | sub → main   | 回覆工作結果                                                      |
+| `QUERY`   | sub → main   | 反問當前 TASK 細節；`IN-REPLY-TO` 指向該 TASK                      |
+| `CLARIFY` | main → sub   | 回應 QUERY；`IN-REPLY-TO` 指向 QUERY 的 ID                         |
+| `SUMMARY` | main → main  | main 產出的摘要訊息；body 必含 `SOURCE_IDS: [...]` 與摘要內容     |
+
+Future types（`REVIEW_REQ` / `FEEDBACK` / `REVISE` / `ACK` / `CANCEL`）
+是否進入 Core 待後續討論。預設它們屬於 application extension 而非 Core。
+
+### Recipient rule (single-value `TO`)
+
+`*TO:*` 強制單值。一次要 dispatch 給 N 個 sub-agent **必須拆成 N 則
+TASK，各有獨立 ID**。同樣 body 內容可重複；目的是讓每個 sub 的
+DELIVER 都能用 `IN-REPLY-TO` 對齊到唯一的 spawn 訊息。
+
+### Logging rule (invariant)
+
+**所有 AIF 訊息（不論 TYPE）必須寫入 `handoff_book.md`，無例外。**
+
+具體後果：
+
+- 純 forward 的 spawn → 仍寫一則 `TYPE: TASK`，body 含 `INPUTS: [<id>, <id>]`
+- main 的中間摘要 → 寫一則 `TYPE: SUMMARY`，body 含 `SOURCE_IDS: [...]`
+  及摘要內容
+- 這條規則是 main 的 hard invariant：「有 AIF message 必有 handoff_book
+  entry」。違反會破壞 self-recovery 與 audit chain。
+
+### Message terminator
+
+每則 AIF 訊息以 `===END_OF_MESSAGE===` 單獨一行收尾。
+
+- 該標記必須獨占一行，前後不得有 inline 內容
+- 在 `handoff_book.md` 中，每則訊息嚴格遵守
+  `header → body → 終止符 → 空行 → 下一則` 的順序
+- 選擇此標記而非空行 / `---` / implicit boundary 的理由：
+  - 顯式邊界對 model fallback 抽取最穩
+  - 與 v2.1 / `handoff_book_spec.md` 維持連續
+  - `---` 與 Markdown 表格 / horizontal rule / YAML front-matter 衝突
+
+## 4. Body schema (per TYPE)
+
+Body 接在 `*MESSAGE:*` 之後，至 `===END_OF_MESSAGE===` 為止。Body 是
+**一個 fenced JSON code block**，使用 snake_case key，單一 JSON object。
+**禁止 NLU 宣染**（problem restatement / polite preamble / 自由段落）。
+
+格式：
+````
+```json
+{ ... single JSON object ... }
+```
+===END_OF_MESSAGE===
+````
+
+### 4.1 TASK body
+
+| Field          | 必須 | 說明                                                                  |
+|----------------|------|-----------------------------------------------------------------------|
+| `goal`         | 是   | string；一行目標。即使是純 forward 也要寫，作為人類 glance 的索引      |
+| `deliverable`  | 是   | object；子欄位 `format` + `required_fields` + `acceptance`；告訴 sub 回什麼形狀 |
+| `inputs`       | 條件 | string array；引用的訊息 ID 列表。Fan-in / 純 forward 時必填           |
+| `scope`        | 否   | string array；scope 細節                                               |
+| `constraints`  | 否   | string array；硬性限制                                                 |
+
+### 4.2 DELIVER body
+
+| Field     | 必須 | 說明                                                                  |
+|-----------|------|-----------------------------------------------------------------------|
+| `status`  | 是   | enum：`"COMPLETED"` / `"PARTIAL"` / `"FAILED"`                        |
+| `summary` | 是   | string；一行摘要                                                      |
+| `result`  | 是   | object；結構化 payload；shape 由觸發 TASK 的 `deliverable.format` 決定 |
+| `notes`   | 否   | string 或 object；補充欄位 / 偏離說明（仍要結構化）                    |
+
+### 4.3 SUMMARY body
+
+| Field        | 必須 | 說明                                              |
+|--------------|------|---------------------------------------------------|
+| `source_ids` | 是   | string array；被摘要訊息的 ID 列表                |
+| `summary`    | 是   | object；結構化摘要內容（key-value 為主，禁止自由段落） |
+
+### 4.4 QUERY body
+
+QUERY 由 sub 發給 main，反問既有 TASK 的細節。Header 必須含
+`*IN-REPLY-TO:*`，指向 sub 當前處理的 **TASK ID**。
+
+| Field            | 必須 | 說明                                                                |
+|------------------|------|---------------------------------------------------------------------|
+| `question`       | 是   | string；一行問句                                                    |
+| `blocking`       | 是   | bool；`true` = sub 停工等待，`false` = sub 用 best-guess 繼續做      |
+| `fields`         | 否   | string array；具體欠缺哪些欄位 / 決策點                             |
+| `context_needed` | 否   | string array；sub 認為自己缺什麼背景才能繼續                         |
+
+### 4.5 CLARIFY body
+
+CLARIFY 由 main 回應 sub 的 QUERY。Header 必須含 `*IN-REPLY-TO:*`,
+指向 **QUERY 的 ID**。
+
+| Field    | 必須 | 說明                                                                |
+|----------|------|---------------------------------------------------------------------|
+| `answer` | 是   | object 或 string；結構化回答；若 QUERY 含 `fields`，建議以同名 key 對齊回填 |
+| `notes`  | 否   | string；補充說明                                                    |
+
+**Reply chain rule**：sub 收到 CLARIFY 後恢復原 TASK；最終 DELIVER 的
+`*IN-REPLY-TO:*` 仍指回**原 TASK** ID（不指 CLARIFY），保持 TASK→DELIVER
+主鏈完整。QUERY↔CLARIFY 是支線。
+
+## 5. Example
+
+```
+# Title: A new project analysis;
+## Description: Initial scoping for the Q3 reporting refactor;
+*TO:* agent-pm@opus-4.7;
+*FROM:* main-agent;
+*TYPE:* TASK;
+*ID:* 20260521-083312-00;
+*MESSAGE:*
+```json
+{
+  "goal": "Scope the Q3 reporting refactor project.",
+  "deliverable": {
+    "format": "milestone-list",
+    "required_fields": ["id", "name", "depends_on", "est_effort_hours", "acceptance_criteria"]
+  }
+}
+```
+===END_OF_MESSAGE===
+```
+
+Reply 範例（sub-agent → main，含上下文引用）：
+
+```
+# Title: Scoping plan for Q3 reporting refactor;
+## Description: non;
+*TO:* main-agent;
+*FROM:* agent-pm@opus-4.7;
+*TYPE:* DELIVER;
+*ID:* 20260521-083315-01;
+*IN-REPLY-TO:* 20260521-083312-00;
+*MESSAGE:*
+```json
+{
+  "status": "COMPLETED",
+  "summary": "Scoping plan produced; 4 milestones identified.",
+  "result": {
+    "milestones": []
+  }
+}
+```
+===END_OF_MESSAGE===
+```
+
+## 6. 為什麼這樣設計
+
+| 決定                                  | 對照原始意圖                                       |
+|---------------------------------------|----------------------------------------------------|
+| Header 用 Markdown heading + `*KEY:*` | 接近 `handoff_book_spec.md` 的極簡格式             |
+| 強制分號                              | 給 model 明確的欄位邊界（fallback 抽取友好）       |
+| `TO: role@model`                      | main 需要從 header parse 出要呼叫哪個 model        |
+| `TYPE:` enum                          | 讓 main 不靠語意推論就能 route / index 訊息        |
+| ID = YYYYMMDD-HHMMSS-NN               | 單值即時間戳，無需額外 sequence file               |
+| 所有訊息必入 handoff_book              | 保證 `IN-REPLY-TO` 鏈不斷 + self-recovery 不缺片段 |
+| 單值 `TO`，多收件人拆訊息              | 每個 sub 的 DELIVER 都能對齊唯一 spawn ID           |
+| Sub 無檔案 I/O                        | 工具不對稱是結構性事實，spec 反映此事實            |
+| Main 是唯一 writer                    | 單一 source of truth，避免 race；支援 self-recovery |
+
+## 7. Pending（不在本 draft 內）
+
+以下項目刻意留白，需後續討論／量測後再寫：
+
+1. **I3「single-file installable」重新界定** — v2.1 的 I3 假設 spec
+   要能 self-contained 載入；hub-spoke 模型下 main 載入完整 Hub Spec、
+   sub 只看 inline stub，I3 需降格為「Hub Spec 本身是 single-file」，
+   不再是全域 invariant。
+2. **Format-agnostic core** — 「連 JSON 都沒關係」是強原則還是
+   aspirational？若強制，v3 Core 必須只定義語意，syntax 可替換
+   （Markdown / JSON / YAML / KV 皆合法的同構表示）。
+3. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
+   （aif-dialect 本身只是 spec repo，不適合做 runtime 量測）。
+4. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
+   都符合 hub-spoke 的工具不對稱前提？若否，v3 是否需要 fallback 模式？
+
+### 已決議（不再 pending）
+
+- `handoff_book.md` 是 v3 的**規範性 transport**（normative），非示範
+  替代品；單一 writer = main-agent
+- `*TYPE:*` 欄位入 Core header，初始 enum：TASK / DELIVER / QUERY / SUMMARY
+- 多收件人 spawn 必拆成多則 TASK（單值 `TO`）
+- 所有 AIF 訊息必入 handoff_book（無例外，含純 forward）
+- main 視兩層遺忘（軟性 / 硬性）為 routine 機制，非 emergency
+- Message terminator = `===END_OF_MESSAGE===`（單獨一行；前後留空行）
+- TASK / DELIVER / SUMMARY body schema 為 normative（§4），fenced JSON
+  block + snake_case key、禁 NLU 宣染
+- `CLARIFY` 加入 TYPE enum（5-entry）；QUERY / CLARIFY body schema
+  為 normative（§4.4 / §4.5）。Reply chain：QUERY↔CLARIFY 是支線，
+  TASK→DELIVER 主鏈不受影響
+- `*DATE:*` 欄位移除（與 `*ID:*` 重複，冗餘）；ID 格式 `YYYYMMDD-HHMMSS-NN`
+  已足夠 human-glance 與 machine-parse
+- Body 格式鎖定為 fenced JSON（`\`\`\`json ... \`\`\``），snake_case key；
+  消除 NLU drift，支援 JSON Schema validation
 
 ---
 
-## 5. What Belongs Where
+## Changelog (this draft)
 
-### In AIF Core (`SKILL.md`)
-
-- TYPE list and body schemas
-- Header field definitions
-- ID requirements (uniqueness, format constraints; concrete format deferred to transport)
-- `RESOLVE(id)` contract: what callers can assume
-- The two context-handoff policies (by-reference, by-summary)
-- `<aif>` wrapper tag and fallback extraction rules
-- Forward-compatibility rules (ignore unknown fields)
-- **Default M2M working language: English (I8)** — the rule itself, not the override mechanism
-
-### In Transport Profiles (`profiles/*.md`)
-
-- Concrete ID format (e.g., `YYYYMMDD-HHMMSS-NN` for file-backed)
-- Storage rules (append-only, immutability, etc.)
-- `RESOLVE(id)` implementation (the actual lookup mechanism)
-- Envelope additions (the transport may need its own headers — see file-backed `Date:`, `Title:`, `Lang:`)
-- Self-verification rules
-
-### In Application Layer (NOT in this repo's AIF spec)
-
-- Role definitions (`roles/agent-*.md`)
-- When to enter the AIF pipeline (auto-routing)
-- MAIN vs SUB agent identification
-- **User-locale translation at the boundary**: when the final hand-off goes to the user, the application's language gateway switches from English M2M to NLU in the user's locale (the I8 boundary rule, implemented application-side)
-- Model-tier choice
-- Override of I8 default (when the deployment chooses a non-English M2M working language)
-
----
-
-## 6. Planned Changes for v2.1
-
-Forward pointer for spec work (implemented under task (b) — not yet written):
-
-- **Move out**: "When to Use AIF" section (currently in SKILL.md) → an application-side document. It describes when an application *chooses* AIF, which is not a protocol concern.
-- **Move in**: Transport abstraction (currently profile-only) → a `Transport` section in SKILL.md, defining the `RESOLVE(id)` contract independent of any implementation.
-- **Add**: `CONTEXT_SUMMARY` and `CONTEXT_SOURCE` body fields for the by-summary policy.
-- **Add**: `READ_MODE: REQUIRED | OPTIONAL` qualifier on `CONTEXT_REF` lists (does the dispatcher require receiver to read all IDs, or is the list advisory?).
-- **Generalize**: replace PM/RD/Reviewer agent names in spec examples with generic placeholders (`agent_a`, `agent_b`). Domain-suggestive names (`agent_searcher`) are fine — they're not the issue; the issue is hardcoding a specific workflow.
-- **Add**: an explicit "Default Working Language" section in SKILL.md stating I8 (M2M = English by default; user-locale boundary is application's job).
-
-### Undecided (open questions for v2.1)
-
-- Does `MODEL` header (tier hint) belong in core or in an application-side header extension? It's about agent capability selection, which feels application-layer; but it travels in the protocol header.
-- Does `SKILLS` header belong in core? It tells the receiver what to load — that's application policy, but it's serialized in the AIF message.
-
-Default position: both stay in core for v2.1, flagged as "application-influenced fields". Revisit in v2.2 if a clean refactor emerges.
-
----
-
-## 7. Explicitly Out of Scope
-
-AIF does not address:
-
-- User experience (UI, conversation pacing)
-- Model selection beyond a coarse `MODEL` hint
-- Authentication / signing (deferred to v2.2+; agent-skills already has draft ideas)
-- JSON / function-call interop (a separate translation profile, not a core concern)
-- Cost accounting (instrumentation, not protocol)
-- Long-term agent identity / reputation (a higher-layer concern)
-
-If a future contribution touches any of these, it is either a separate profile or it belongs in a different repo.
-
----
-
-## 8. Relationship to Existing Files in This Repo
-
-| File | Conformance with this design |
-|---|---|
-| `skills/aif-dialect/SKILL.md` | Mostly aligned. **Drift**: "When to Use AIF" section mixes in application policy (I2 violation). To be cleaned in v2.1. |
-| `skills/aif-dialect/profiles/file-backed-transport.md` | Aligned. Implements I6 and I7. |
-| `skills/universal-agent/SKILL.md` | **Application layer** — MAIN/SUB identification, reply-language rules. Not part of AIF; should not be loaded together with AIF as if it were a sub-component. |
-| `skills/auto-routing/SKILL.md` | **Application layer** — names specific roles (`agent_pm` → `agent_rd` → …). Not part of AIF. |
-| `skills/logging/SKILL.md` | **Application layer** — though it logs AIF messages, the policy of when/where/how to log is application's choice. |
-| `roles/*.md` | Application layer. Currently most role files `SKILLS_REQUIRED: aif-dialect`; that direction is correct (role depends on protocol, not the reverse). PM v3.2 has gone further by making AIF self-activating; other roles have not caught up. |
-| `commands/*.md` | Application layer. Already do not pre-load `aif-dialect` (self-activation). Aligned. |
-
-Tasks (c) — cleaning up dependency direction in `universal-agent` and `auto-routing` — flows from this analysis: these files belong to the application layer and should describe AIF as an optional companion, not a required peer.
-
----
-
-**Created**: 2026-05-21  
-**Status**: Draft. The invariants (Section 3) are the ratchet — once accepted, future spec changes are tested against them.
+- 2026-05-21: 初稿。確立 hub-spoke 拓樸、M2M strict 目標、header schema。
+- 2026-05-21: 補 `*TYPE:*` 欄位（enum: TASK/DELIVER/QUERY/SUMMARY）、
+  all-spawns-logged invariant、main 兩層 context 管理 + working state、
+  單值 `TO` 規則。確認 `handoff_book.md` 為 normative transport。
+- 2026-05-21: 加入端到端 walkthrough（`examples/v3-walkthrough/`）。
+  Pending 新增「message terminator」項目（walkthrough 沿用
+  `===END_OF_MESSAGE===` 待 spec 拍板）。
+- 2026-05-21: 鎖定 message terminator = `===END_OF_MESSAGE===`（單獨一行）。
+  §3 補上 "Message terminator" 小節；§6 移除該 pending 項並列入已決議。
+- 2026-05-21: 加入 §4 Body schema (per TYPE)，TASK / DELIVER / SUMMARY
+  body 升格 normative；QUERY / CLARIFY 整併為 pending item 1（含 TYPE
+  enum 是否擴充至 5 entry）。其餘節次相應後移為 §5/§6/§7。
+- 2026-05-21: `CLARIFY` 加入 TYPE enum；§4.4 QUERY、§4.5 CLARIFY body
+  schema 升格 normative。確立 reply chain rule：QUERY↔CLARIFY 是支線，
+  最終 DELIVER 的 `IN-REPLY-TO` 仍指回原 TASK。Mini-walkthrough 見
+  `examples/v3-walkthrough/query_clarify.md`。
+- 2026-05-21: 移除 `*DATE:*` 欄位（與 `*ID:*` 冗餘）。Header template、
+  field rules table、ID 規則細節、§5 examples、§6 表格均已更新。
+  Walkthrough files 同步移除所有 `*DATE:*` 行。
+- 2026-05-21: Body 格式改為 fenced JSON（`\`\`\`json ... \`\`\``）+ snake_case
+  key。§4 所有 TYPE schema 欄位名稱由 `KEY:` 形式改為 JSON key 形式。
+  §5 examples 與兩個 walkthrough 檔案（handoff_book.md、query_clarify.md）
+  全部 body 已轉換為 fenced JSON。README.md 更新 Body schemas 描述。

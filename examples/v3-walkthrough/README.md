@@ -2,7 +2,7 @@
 
 Status: **draft scenario**. Demonstrates AIF v3 mechanics. Not normative.
 
-This walkthrough exercises the `DESIGN-v3-draft.md` rules end-to-end on a
+This walkthrough exercises the `DESIGN.md` rules end-to-end on a
 small project: build a Python CLI that watches a directory and POSTs file
 change events to a webhook.
 
@@ -41,7 +41,7 @@ rules it expands to **14**:
 
 ## Things to notice while reading `handoff_book.md`
 
-1. **All messages use the v3 header schema** (§3 of `DESIGN-v3-draft.md`):
+1. **All messages use the v3 header schema** (§3 of `DESIGN.md`):
    `# Title; ## Description; *TO:*; *FROM:*; *TYPE:*; *ID:*;
    *IN-REPLY-TO:*; *MESSAGE:*`.
 2. **`IN-REPLY-TO:` rule applied**:
@@ -64,14 +64,14 @@ rules it expands to **14**:
 
 All message bodies are **fenced JSON blocks** (`\`\`\`json ... \`\`\``) with
 snake_case keys, immediately following `*MESSAGE:*`. Body shapes per TYPE are
-**normative**, defined in `DESIGN-v3-draft.md §4`. The walkthrough's bodies
+**normative**, defined in `DESIGN.md §4`. The walkthrough's bodies
 conform to those schemas. QUERY / CLARIFY schemas are also normative
 (§4.4 / §4.5).
 
 ### Message terminator
 
 `===END_OF_MESSAGE===` on its own line — also **normative** (see
-`DESIGN-v3-draft.md §3` Message terminator subsection).
+`DESIGN.md §3` Message terminator subsection).
 
 ## Mini-walkthrough: QUERY / CLARIFY
 
