@@ -87,7 +87,7 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 ## Description: <optional one-paragraph context>;
 *TO:* <role>@<model>;
 *FROM:* <role>[@<model>];
-*TYPE:* TASK | DELIVER | QUERY | SUMMARY;
+*TYPE:* TASK | DELIVER | QUERY | CLARIFY | SUMMARY;
 *DATE:* YYYYMMDD-HHMMSS-NN;
 *ID:* YYYYMMDD-HHMMSS-NN;
 *IN-REPLY-TO:* <prior ID>;
@@ -103,7 +103,7 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 | `## Description` | 否   | Markdown H2；若出現則分號結尾；可為 "non" / 略                       |
 | `*TO:*`          | 是   | `<role>@<model>`，e.g. `agent-pm@opus-4.7`；分號結尾                |
 | `*FROM:*`        | 是   | `<role>` 或 `<role>@<model>`；`main-agent` 可省略 `@model`；分號結尾 |
-| `*TYPE:*`        | 是   | enum：`TASK` / `DELIVER` / `QUERY` / `SUMMARY`；分號結尾            |
+| `*TYPE:*`        | 是   | enum：`TASK` / `DELIVER` / `QUERY` / `CLARIFY` / `SUMMARY`；分號結尾 |
 | `*DATE:*`        | 是   | `YYYYMMDD-HHMMSS-NN`，與 `*ID:*` 內容相同（human-glance 用）        |
 | `*ID:*`          | 是   | `YYYYMMDD-HHMMSS-NN`；由 main 在寫入 handoff_book 時生成            |
 | `*IN-REPLY-TO:*` | 條件 | 引用先前訊息的 `ID`；sub→main 反問既有上下文時必填                  |
@@ -127,16 +127,16 @@ Sub-agent ↔ main-agent 之間的訊息必須是結構化、可被 parse 的，
 
 ### TYPE enum (initial set)
 
-| TYPE      | 方向         | 用途                                                          |
-|-----------|--------------|---------------------------------------------------------------|
-| `TASK`    | main → sub   | 指派工作；包含純 forward 情境（body 至少含 `INPUTS:` 引用 IDs）|
-| `DELIVER` | sub → main   | 回覆工作結果                                                  |
-| `QUERY`   | sub → main   | 反問既有上下文；必填 `IN-REPLY-TO`（body schema 待定）         |
-| `SUMMARY` | main → main  | main 產出的摘要訊息；body 必含 `SOURCE_IDS: [...]` 與摘要內容 |
+| TYPE      | 方向         | 用途                                                              |
+|-----------|--------------|-------------------------------------------------------------------|
+| `TASK`    | main → sub   | 指派工作；包含純 forward 情境（body 至少含 `INPUTS:` 引用 IDs）    |
+| `DELIVER` | sub → main   | 回覆工作結果                                                      |
+| `QUERY`   | sub → main   | 反問當前 TASK 細節；`IN-REPLY-TO` 指向該 TASK                      |
+| `CLARIFY` | main → sub   | 回應 QUERY；`IN-REPLY-TO` 指向 QUERY 的 ID                         |
+| `SUMMARY` | main → main  | main 產出的摘要訊息；body 必含 `SOURCE_IDS: [...]` 與摘要內容     |
 
-Future types（`REVIEW_REQ` / `FEEDBACK` / `REVISE` / `ACK` / `CANCEL`
-/ `CLARIFY`）是否進入 Core 待後續討論。預設它們屬於 application
-extension 而非 Core。
+Future types（`REVIEW_REQ` / `FEEDBACK` / `REVISE` / `ACK` / `CANCEL`）
+是否進入 Core 待後續討論。預設它們屬於 application extension 而非 Core。
 
 ### Recipient rule (single-value `TO`)
 
@@ -200,10 +200,31 @@ Body 接在 `*MESSAGE:*` 之後，至 `===END_OF_MESSAGE===` 為止。Body 以
 | `SOURCE_IDS:` | 是   | 被摘要訊息的 ID 列表                              |
 | `SUMMARY:`    | 是   | 結構化摘要內容（key-value 為主，禁止自由段落）     |
 
-### 4.4 QUERY / CLARIFY body
+### 4.4 QUERY body
 
-待 §7 確認後補（QUERY 屬 sub→main 反問，CLARIFY 為 main 對 QUERY 的
-回覆）。CLARIFY 尚未加入 §3 的 TYPE enum，需一併拍板。
+QUERY 由 sub 發給 main，反問既有 TASK 的細節。Header 必須含
+`*IN-REPLY-TO:*`，指向 sub 當前處理的 **TASK ID**。
+
+| Field             | 必須 | 說明                                                                |
+|-------------------|------|---------------------------------------------------------------------|
+| `QUESTION:`       | 是   | 一行問句                                                            |
+| `BLOCKING:`       | 是   | bool；`true` = sub 停工等待，`false` = sub 用 best-guess 繼續做      |
+| `FIELDS:`         | 否   | bullet list；具體欠缺哪些欄位 / 決策點                              |
+| `CONTEXT_NEEDED:` | 否   | bullet list；sub 認為自己缺什麼背景才能繼續                          |
+
+### 4.5 CLARIFY body
+
+CLARIFY 由 main 回應 sub 的 QUERY。Header 必須含 `*IN-REPLY-TO:*`,
+指向 **QUERY 的 ID**。
+
+| Field     | 必須 | 說明                                                                |
+|-----------|------|---------------------------------------------------------------------|
+| `ANSWER:` | 是   | 結構化回答；若 QUERY 含 `FIELDS:`，建議以同名 key 對齊回填            |
+| `NOTES:`  | 否   | 補充說明                                                            |
+
+**Reply chain rule**：sub 收到 CLARIFY 後恢復原 TASK；最終 DELIVER 的
+`*IN-REPLY-TO:*` 仍指回**原 TASK** ID（不指 CLARIFY），保持 TASK→DELIVER
+主鏈完整。QUERY↔CLARIFY 是支線。
 
 ## 5. Example
 
@@ -252,23 +273,16 @@ Reply 範例（sub-agent → main，含上下文引用）：
 
 以下項目刻意留白，需後續討論／量測後再寫：
 
-1. **QUERY / CLARIFY body schema + TYPE enum 擴充** — QUERY (sub→main
-   反問) 與 CLARIFY (main→sub 回應) 一組。需決定：
-   - CLARIFY 是否加入 §3 TYPE enum（變 5-entry）
-   - QUERY body 表達「問什麼」的欄位設計（FIELDS / QUESTION / BLOCKING 等）
-   - CLARIFY body 回覆欄位
-   - QUERY 是否容忍 sub 自行決策（非 blocking）vs 強制阻塞等待
-   走訪場景由 step C 提供。
-2. **I3「single-file installable」重新界定** — v2.1 的 I3 假設 spec
+1. **I3「single-file installable」重新界定** — v2.1 的 I3 假設 spec
    要能 self-contained 載入；hub-spoke 模型下 main 載入完整 Hub Spec、
    sub 只看 inline stub，I3 需降格為「Hub Spec 本身是 single-file」，
    不再是全域 invariant。
-3. **Format-agnostic core** — 「連 JSON 都沒關係」是強原則還是
+2. **Format-agnostic core** — 「連 JSON 都沒關係」是強原則還是
    aspirational？若強制，v3 Core 必須只定義語意，syntax 可替換
    （Markdown / JSON / YAML / KV 皆合法的同構表示）。
-4. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
+3. **Token budget 量測** — 在另一個會跑實際 agent 的 repo 進行
    （aif-dialect 本身只是 spec repo，不適合做 runtime 量測）。
-5. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
+4. **跨平台適用性** — Copilot CLI / Gemini CLI / 純 LLM API 環境是否
    都符合 hub-spoke 的工具不對稱前提？若否，v3 是否需要 fallback 模式？
 
 ### 已決議（不再 pending）
@@ -282,6 +296,9 @@ Reply 範例（sub-agent → main，含上下文引用）：
 - Message terminator = `===END_OF_MESSAGE===`（單獨一行；前後留空行）
 - TASK / DELIVER / SUMMARY body schema 為 normative（§4），key:value
   + YAML 縮排 bullet、禁 NLU 宣染
+- `CLARIFY` 加入 TYPE enum（5-entry）；QUERY / CLARIFY body schema
+  為 normative（§4.4 / §4.5）。Reply chain：QUERY↔CLARIFY 是支線，
+  TASK→DELIVER 主鏈不受影響
 
 ---
 
@@ -299,3 +316,7 @@ Reply 範例（sub-agent → main，含上下文引用）：
 - 2026-05-21: 加入 §4 Body schema (per TYPE)，TASK / DELIVER / SUMMARY
   body 升格 normative；QUERY / CLARIFY 整併為 pending item 1（含 TYPE
   enum 是否擴充至 5 entry）。其餘節次相應後移為 §5/§6/§7。
+- 2026-05-21: `CLARIFY` 加入 TYPE enum；§4.4 QUERY、§4.5 CLARIFY body
+  schema 升格 normative。確立 reply chain rule：QUERY↔CLARIFY 是支線，
+  最終 DELIVER 的 `IN-REPLY-TO` 仍指回原 TASK。Mini-walkthrough 見
+  `examples/v3-walkthrough/query_clarify.md`。

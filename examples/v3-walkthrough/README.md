@@ -71,6 +71,29 @@ schemas. QUERY / CLARIFY bodies are still pending (see `§7 item 1`).
 `===END_OF_MESSAGE===` on its own line — also **normative** (see
 `DESIGN-v3-draft.md §3` Message terminator subsection).
 
+## Mini-walkthrough: QUERY / CLARIFY
+
+See `query_clarify.md` for a 4-message scenario where the PM finds the
+original goal ambiguous and asks main for a decision before producing
+the plan:
+
+| # | TYPE     | From → To       | Note                                          |
+|---|----------|-----------------|-----------------------------------------------|
+| 1 | TASK     | main → pm       | plan a directory-watcher CLI                  |
+| 2 | QUERY    | pm → main       | `BLOCKING: true`; dotfile handling unclear    |
+| 3 | CLARIFY  | main → pm       | answers FIELDS in QUERY                       |
+| 4 | DELIVER  | pm → main       | `IN-REPLY-TO` = msg 1 (not msg 3)             |
+
+Key invariants exercised:
+- QUERY's `IN-REPLY-TO` points to the **TASK** the sub is working on
+- CLARIFY's `IN-REPLY-TO` points to the **QUERY**
+- DELIVER's `IN-REPLY-TO` still points to the **original TASK** —
+  QUERY↔CLARIFY is a side-branch, the TASK→DELIVER main chain is
+  unaffected
+- `BLOCKING: true` means the PM holds the plan until receiving CLARIFY;
+  `BLOCKING: false` would mean PM proceeds with a best-guess decision
+  and surfaces the assumption in DELIVER notes
+
 ## Token cost (rough)
 
 `handoff_book.md` for this scenario ≈ 11 KB / ~3,000 tokens. Main agent's
