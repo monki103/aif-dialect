@@ -6,6 +6,10 @@ via a file-backed message log (`handoff_book.md`). All inter-agent
 traffic is structured JSON; no natural-language prose ever travels
 between agents.
 
+Non-goal: AIF is a transport protocol, not a replacement for model
+semantic understanding. Do not treat model-internal state (for example
+KV cache) as an inter-agent message format.
+
 This skill is loaded **only by the main-agent**. Sub-agents receive a
 small inline stub (defined in §9) at spawn time and do not load this
 file. For the design rationale and history of v3, see
