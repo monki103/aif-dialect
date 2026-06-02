@@ -1,3 +1,8 @@
+---
+name: aif-dialect
+description: AIF v3 machine-to-machine (M2M) dialect for hub-spoke multi-agent orchestration via a file-backed message log. Load when an agent must speak AIF — structured JSON M2M traffic, TASK→DELIVER and REVIEW_REQ→FEEDBACK→REVISE flows, no natural-language prose between agents.
+---
+
 # AIF Dialect Skill (v3.0)
 
 AIF v3 is a **machine-to-machine (M2M) dialect** for hub-spoke agent
